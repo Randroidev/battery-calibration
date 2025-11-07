@@ -6,11 +6,11 @@
 // =================== COLOR DEFINITIONS ===================
 #define COLOR_DARK_BLUE     0x001F
 #define COLOR_MAROON        0x7800
-#define COLOR_YELLOW        ST7789_YELLOW
-#define COLOR_RED           ST7789_RED
+#define COLOR_YELLOW        ST77XX_YELLOW
+#define COLOR_RED           ST77XX_RED
 #define COLOR_DARK_GREEN    0x03E0
-#define COLOR_BLACK         ST7789_BLACK
-#define COLOR_WHITE         ST7789_WHITE
+#define COLOR_BLACK         ST77XX_BLACK
+#define COLOR_WHITE         ST77XX_WHITE
 #define COLOR_GREY          0x8410
 
 // =================== OBJECTS ===================
