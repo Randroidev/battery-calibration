@@ -6,7 +6,7 @@
 static TrainerState currentState = IDLE;
 static uint8_t cyclesLeft = 0;
 static uint8_t totalCycles = 0;
-static unsigned long pauseTimer = 0;
+static unsigned long phaseTimer = 0;
 static bool processRunning = false;
 
 // Function to set all indicators and relays off
@@ -35,9 +35,10 @@ void startStopProcess(uint8_t cycles) {
     if (cycles > 0) {
       cyclesLeft = cycles;
       totalCycles = cycles;
-      currentState = DISCHARGING; // Start with discharge
+      currentState = DISCHARGING;
+      phaseTimer = millis();
     } else {
-      processRunning = false; // Cannot start with 0 cycles
+      processRunning = false;
     }
   } else {
     currentState = IDLE;
@@ -45,7 +46,7 @@ void startStopProcess(uint8_t cycles) {
   }
 }
 
-void updateStateMachine(const sbs_data_t& sbsData) {
+void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
   if (!processRunning) {
     currentState = IDLE;
     allOff();
@@ -63,18 +64,19 @@ void updateStateMachine(const sbs_data_t& sbsData) {
       allOff();
       digitalWrite(LED_DISCHARGE_PIN, HIGH);
       digitalWrite(RELAY_DISCHARGE_PIN, HIGH);
-      // Check for end of discharge: Fully Discharged bit (5) in BatteryStatus
-      if (sbsData.dataValid && (sbsData.batteryStatus & (1 << 5))) {
+      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoDischargeTime * 1000) ||
+          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 5)))) {
         currentState = PAUSE_AFTER_DISCHARGE;
-        pauseTimer = millis();
+        phaseTimer = millis();
       }
       break;
 
     case PAUSE_AFTER_DISCHARGE:
       allOff();
       digitalWrite(LED_PAUSE_DISCHARGE_PIN, HIGH);
-      if (millis() - pauseTimer > (unsigned long)s.pauseAfterDischarge * 60000) {
+      if (millis() - phaseTimer > (unsigned long)s.pauseAfterDischarge * 60000) {
         currentState = CHARGING;
+        phaseTimer = millis();
       }
       break;
 
@@ -82,20 +84,21 @@ void updateStateMachine(const sbs_data_t& sbsData) {
       allOff();
       digitalWrite(LED_CHARGE_PIN, HIGH);
       digitalWrite(RELAY_CHARGE_PIN, HIGH);
-      // Check for end of charge: Fully Charged bit (4) in BatteryStatus
-      if (sbsData.dataValid && (sbsData.batteryStatus & (1 << 4))) {
+      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoChargeTime * 1000) ||
+          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 4)))) {
         currentState = PAUSE_AFTER_CHARGE;
-        pauseTimer = millis();
+        phaseTimer = millis();
       }
       break;
 
     case PAUSE_AFTER_CHARGE:
       allOff();
       digitalWrite(LED_PAUSE_CHARGE_PIN, HIGH);
-      if (millis() - pauseTimer > (unsigned long)s.pauseAfterCharge * 60000) {
+      if (millis() - phaseTimer > (unsigned long)s.pauseAfterCharge * 60000) {
         cyclesLeft--;
         if (cyclesLeft > 0) {
           currentState = DISCHARGING;
+          phaseTimer = millis();
         } else {
           currentState = IDLE;
           processRunning = false;

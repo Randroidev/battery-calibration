@@ -92,29 +92,25 @@ bool readSBSData(sbs_data_t& data) {
 }
 
 void generateDemoData(sbs_data_t& data, TrainerState state) {
-    static unsigned long demoTimer = 0;
-    static float fakeVoltage = 12500; // in mV
-    static float fakeCapacity = 2000; // in mAh
-    Settings& s = getSettings();
+    static float fakeVoltage = 12500;
+    static float fakeCapacity = 2000;
 
-    if (millis() - demoTimer > 1000) { // Update once per second
-        if (state == DISCHARGING) {
-            fakeVoltage -= (float)s.demoDischargeTime * 10;
-            fakeCapacity -= (float)s.demoDischargeTime * 5;
-            if (fakeVoltage < 10000) fakeVoltage = 10000;
-            if (fakeCapacity < 0) fakeCapacity = 0;
-        } else if (state == CHARGING) {
-            fakeVoltage += (float)s.demoChargeTime * 10;
-            fakeCapacity += (float)s.demoChargeTime * 5;
-            if (fakeVoltage > 14800) fakeVoltage = 14800;
-            if (fakeCapacity > 2200) fakeCapacity = 2200;
-        }
-        demoTimer = millis();
+    // Animate voltage and capacity
+    if (state == DISCHARGING) {
+        fakeVoltage -= 10;
+        fakeCapacity -= 0.5;
+    } else if (state == CHARGING) {
+        fakeVoltage += 10;
+        fakeCapacity += 0.5;
     }
+    if (fakeVoltage < 10000) fakeVoltage = 10000;
+    if (fakeVoltage > 14800) fakeVoltage = 14800;
+    if (fakeCapacity < 0) fakeCapacity = 0;
+    if (fakeCapacity > 2200) fakeCapacity = 2200;
 
     data.voltage = fakeVoltage;
     data.current = (state == DISCHARGING) ? -1500 : (state == CHARGING) ? 1500 : 0;
-    data.temperature = 2981; // 25 C in Kelvin * 10
+    data.temperature = 2981; // 25 C
     data.maxError = 2;
     data.remainingCapacity = fakeCapacity;
     data.fullChargeCapacity = 2200;
@@ -123,22 +119,12 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
     data.cycleCount = 42;
     data.designVoltage = 14800;
     data.designCapacity = 2200;
-    // Provide more realistic, slightly unbalanced cell voltages
-    data.cellVoltage1 = (state == CHARGING) ? fakeVoltage / 4 + 50 : fakeVoltage / 4 - 20;
-    data.cellVoltage2 = (state == CHARGING) ? fakeVoltage / 4 - 30 : fakeVoltage / 4 + 10;
-    data.cellVoltage3 = (state == CHARGING) ? fakeVoltage / 4 + 10 : fakeVoltage / 4 - 40;
+    data.cellVoltage1 = fakeVoltage / 4 + 50;
+    data.cellVoltage2 = fakeVoltage / 4 - 30;
+    data.cellVoltage3 = fakeVoltage / 4 + 10;
     data.cellVoltage4 = fakeVoltage - data.cellVoltage1 - data.cellVoltage2 - data.cellVoltage3;
-
-    // Simulate status flags
-    data.batteryMode = 0x0001; // Internal Charge Controller
-    if (state == DISCHARGING && fakeCapacity < 100) {
-        data.batteryStatus = (1 << 5); // Fully Discharged
-    } else if (state == CHARGING && fakeCapacity > 2100) {
-        data.batteryStatus = (1 << 4); // Fully Charged
-    } else {
-        data.batteryStatus = (state == DISCHARGING) ? (1 << 6) : 0; // Discharging bit
-    }
-
+    data.batteryMode = 0x8001; // Internal Charge Controller, Capacity Mode
+    data.batteryStatus = 0;
     data.dataValid = true;
 }
 

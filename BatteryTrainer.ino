@@ -9,9 +9,11 @@
 #include "display.h"
 #include "sbs_handler.h"
 #include "state_machine.h"
+#include "Encoder.h"
 
 // =================== GLOBAL OBJECTS ===================
 sbs_data_t sbsData;
+Encoder myEnc(ENC_S1_PIN, ENC_S2_PIN);
 
 // =================== PROGRAM STATE ===================
 enum Screen { MAIN_MENU, CYCLES_SCREEN, DEVICE_PING_SCREEN, SETTINGS_SCREEN, DEMO_SCREEN };
@@ -29,32 +31,14 @@ unsigned long displayUpdateTimer = 0;
 unsigned long serialOutputTimer = 0;
 
 // =================== ENCODER VARS ===================
-volatile long encoderPos = 0;
+long oldEncoderPos = -999;
 unsigned long lastButtonPress = 0;
-
-// =================== ISR ===================
-void readEncoder() {
-  static uint8_t old_AB = 0;
-  // Read the current state of CLK and DT
-  old_AB <<= 2;
-  old_AB |= (digitalRead(ENC_S1_PIN) << 1) | digitalRead(ENC_S2_PIN);
-  // A standard quadrature encoder pattern this will produce is 3, 1, 0, 2
-  // Clockwise: 3, 1, 0, 2, ...
-  // Counter-clockwise: 3, 2, 0, 1, ...
-  if ((old_AB & 0x0F) == 0x0b) encoderPos++; // Clockwise
-  if ((old_AB & 0x0F) == 0x07) encoderPos--; // Counter-clockwise
-}
 
 // =================== SETUP ===================
 void setup() {
   Serial.begin(115200);
 
-  pinMode(ENC_S1_PIN, INPUT);
-  pinMode(ENC_S2_PIN, INPUT);
   pinMode(ENC_KEY_PIN, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(ENC_S1_PIN), readEncoder, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENC_S2_PIN), readEncoder, CHANGE);
 
   loadSettings();
   cyclesToRun = getSettings().cyclesCount;
@@ -73,12 +57,20 @@ void loop() {
 
   if (millis() - sbsReadTimer > (unsigned long)getSettings().smbusReadTimeout * 1000) {
     sbsReadTimer = millis();
-    if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) {
+    if (currentScreen == CYCLES_SCREEN) {
       readSBSData(sbsData);
-      updateStateMachine(sbsData);
+      updateStateMachine(sbsData, false); // Not demo mode
+    } else if (currentScreen == DEMO_SCREEN) {
+      // Data is generated inside updateStateMachine for demo mode
+      updateStateMachine(sbsData, true); // Demo mode
     } else if (currentScreen == DEVICE_PING_SCREEN) {
       readSBSData(sbsData);
     }
+  }
+
+  // In demo mode, we need to continuously generate data for display
+  if (currentScreen == DEMO_SCREEN) {
+    generateDemoData(sbsData, getCurrentState());
   }
 
   if (millis() - displayUpdateTimer > 500) {
@@ -100,16 +92,9 @@ void loop() {
 
 // =================== HANDLERS ===================
 void handleEncoder() {
-  static long lastEncoderPos = 0;
-  long currentPos;
-
-  // Atomically read the encoder position
-  noInterrupts();
-  currentPos = encoderPos;
-  interrupts();
-
-  if (currentPos != lastEncoderPos) {
-    int direction = (currentPos > lastEncoderPos) ? 1 : -1;
+  long newEncoderPos = myEnc.read();
+  if (newEncoderPos != oldEncoderPos) {
+    int direction = (newEncoderPos > oldEncoderPos) ? 1 : -1;
 
     switch(currentScreen) {
         case MAIN_MENU:
@@ -132,7 +117,7 @@ void handleEncoder() {
             }
             break;
     }
-    lastEncoderPos = currentPos;
+    oldEncoderPos = newEncoderPos;
   }
 }
 
@@ -158,8 +143,15 @@ void handleButton() {
                 break;
             case SETTINGS_SCREEN:
                 if (settingsMenuSelection == 8) { resetSettings(); drawSettingsScreen(settingsMenuSelection, settingsEditMode, true); }
-                else if (settingsMenuSelection == 9) { getSettings().cyclesCount = cyclesToRun; saveSettings(); currentScreen = MAIN_MENU; drawMainMenu(mainMenuSelection, true); }
-                else { settingsEditMode = !settingsEditMode; drawSettingsScreen(settingsMenuSelection, settingsEditMode, false); }
+                else if (settingsMenuSelection == 9) {
+                    getSettings().cyclesCount = cyclesToRun; // Save current cycle value if changed
+                    saveSettings();
+                    currentScreen = MAIN_MENU;
+                    drawMainMenu(mainMenuSelection, true);
+                } else {
+                    settingsEditMode = !settingsEditMode;
+                    drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
+                }
                 break;
         }
     }

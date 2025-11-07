@@ -5,7 +5,7 @@
 
 void initStateMachine();
 void startStopProcess(uint8_t cycles);
-void updateStateMachine(const sbs_data_t& sbsData);
+void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode);
 TrainerState getCurrentState();
 uint8_t getCyclesLeft();
 bool isProcessRunning();
