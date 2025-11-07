@@ -144,7 +144,7 @@ void handleEncoder() {
 
     bool needsRedraw = false;
 
-    // Handle rotation left (moves selection DOWN)
+    // Handle rotation left (moves selection DOWN, increases value)
     if (enc.isLeft()) {
         if (currentScreen == MAIN_MENU) {
             mainMenuSelection = (mainMenuSelection < 3) ? mainMenuSelection + 1 : 0;
@@ -158,7 +158,7 @@ void handleEncoder() {
         }
     }
 
-    // Handle rotation right (moves selection UP)
+    // Handle rotation right (moves selection UP, decreases value)
     if (enc.isRight()) {
         if (currentScreen == MAIN_MENU) {
             mainMenuSelection = (mainMenuSelection > 0) ? mainMenuSelection - 1 : 3;
@@ -232,16 +232,14 @@ void handleEncoder() {
 // =================== SETTINGS HELPER ===================
 void update_settings_value(int amount) {
     Settings& s = getSettings();
-    // Invert amount because left rotation now means +1
-    int value = amount * -1;
     switch (settingsMenuSelection) {
-        case 0: s.cyclesCount = constrain(s.cyclesCount + value, 0, 99); cyclesToRun = s.cyclesCount; break;
-        case 1: s.devicePingTimeout = constrain(s.devicePingTimeout + value, 0, 99); break;
-        case 2: s.pauseAfterCharge = constrain(s.pauseAfterCharge + value, 0, 999); break;
-        case 3: s.pauseAfterDischarge = constrain(s.pauseAfterDischarge + value, 0, 999); break;
-        case 4: s.smbusReadTimeout = constrain(s.smbusReadTimeout + value, 0, 99); break;
-        case 5: s.demoChargeTime = constrain(s.demoChargeTime + value, 0, 99); break;
-        case 6: s.demoDischargeTime = constrain(s.demoDischargeTime + value, 0, 99); break;
-        case 7: s.serialOutputTimeout = constrain(s.serialOutputTimeout + value, 0, 99); break;
+        case 0: s.cyclesCount = constrain(s.cyclesCount + amount, 0, 99); cyclesToRun = s.cyclesCount; break;
+        case 1: s.devicePingTimeout = constrain(s.devicePingTimeout + amount, 0, 99); break;
+        case 2: s.pauseAfterCharge = constrain(s.pauseAfterCharge + amount, 0, 999); break;
+        case 3: s.pauseAfterDischarge = constrain(s.pauseAfterDischarge + amount, 0, 999); break;
+        case 4: s.smbusReadTimeout = constrain(s.smbusReadTimeout + amount, 0, 99); break;
+        case 5: s.demoChargeTime = constrain(s.demoChargeTime + amount, 0, 99); break;
+        case 6: s.demoDischargeTime = constrain(s.demoDischargeTime + amount, 0, 99); break;
+        case 7: s.serialOutputTimeout = constrain(s.serialOutputTimeout + amount, 0, 99); break;
     }
 }

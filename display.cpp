@@ -9,7 +9,7 @@
 #define COLOR_RED           0xF800
 #define COLOR_DARK_GREEN    0x03E0
 #define COLOR_BLACK         ILI9341_BLACK
-#define COLOR_WHITE         ILI9-341_WHITE
+#define COLOR_WHITE         ILI9341_WHITE
 #define COLOR_GREY          0x8410
 
 // =================== OBJECTS ===================
