@@ -2,7 +2,9 @@
 #define SBS_HANDLER_H
 
 #include <Arduino.h>
-#include "state_machine.h" // Needed for trainer state
+
+// Forward declaration to break circular dependency
+enum TrainerState;
 
 // Structure to hold Smart Battery Data
 typedef struct {

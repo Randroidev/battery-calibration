@@ -1,6 +1,7 @@
 #ifndef STATE_MACHINE_H
 #define STATE_MACHINE_H
 
+// sbs_data_t is defined in sbs_handler.h
 #include "sbs_handler.h"
 
 enum TrainerState {

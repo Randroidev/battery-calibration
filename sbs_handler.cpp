@@ -1,5 +1,7 @@
 #include "sbs_handler.h"
 #include "config.h"
+#include "settings.h"
+#include "state_machine.h"
 #include <Wire.h>
 
 // SMBus Commands for Smart Battery Specification
