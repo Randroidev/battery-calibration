@@ -74,7 +74,7 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     case PAUSE_AFTER_DISCHARGE:
       allOff();
       digitalWrite(LED_PAUSE_DISCHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (unsigned long)s.pauseAfterDischarge * 60000) {
+      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterDischarge * 60000)) {
         currentState = CHARGING;
         phaseTimer = millis();
       }
@@ -94,7 +94,7 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     case PAUSE_AFTER_CHARGE:
       allOff();
       digitalWrite(LED_PAUSE_CHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (unsigned long)s.pauseAfterCharge * 60000) {
+      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterCharge * 60000)) {
         cyclesLeft--;
         if (cyclesLeft > 0) {
           currentState = DISCHARGING;

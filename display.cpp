@@ -20,7 +20,7 @@ const char* menuItems[] = {"Cycles", "Device Ping", "Settings", "Demo"};
 static sbs_data_t lastSbsData;
 static int8_t oldMainMenuSelection = -1;
 static int8_t oldSettingsMenuSelection = -1;
-static uint8_t lastCyclesLeft = -1, lastCyclesTotal = -1;
+static uint8_t lastCyclesLeft = 255, lastCyclesTotal = 255;
 static bool lastIsRunning = false;
 
 // =================== INITIALIZATION ===================
@@ -52,7 +52,6 @@ void drawStatusBits(int16_t x, int16_t y, uint16_t statusWord) {
 // =================== SCREEN DRAWING FUNCTIONS ===================
 
 void drawMainMenu(int8_t selectedItem, bool fullRedraw) {
-  // Full redraw clears screen and draws all items
   if (fullRedraw) {
     tft.fillScreen(COLOR_BLACK);
     tft.setTextSize(3);
@@ -62,14 +61,12 @@ void drawMainMenu(int8_t selectedItem, bool fullRedraw) {
       tft.setCursor(20, 80 + i * 50);
       tft.println(menuItems[i]);
     }
-  } else { // Partial redraw only updates changed items
+  } else {
     if (selectedItem != oldMainMenuSelection) {
       tft.setTextSize(3);
-      // Redraw old item in normal colors
       tft.setTextColor(COLOR_WHITE, COLOR_BLACK);
       tft.setCursor(20, 80 + oldMainMenuSelection * 50);
       tft.println(menuItems[oldMainMenuSelection]);
-      // Redraw new item in highlighted colors
       tft.setTextColor(COLOR_BLACK, COLOR_WHITE);
       tft.setCursor(20, 80 + selectedItem * 50);
       tft.println(menuItems[selectedItem]);
@@ -83,26 +80,21 @@ void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyc
 
     if (fullRedraw) {
         tft.fillScreen(COLOR_BLACK);
-        // Draw static labels that don't change
         tft.setTextColor(COLOR_WHITE);
         tft.setTextSize(1);
         tft.setCursor(2, 285); tft.print("Status:");
         tft.setCursor(2, 305); tft.print("Mode:");
         // Force redraw of all fields on next pass
-        memset(&lastSbsData, 0, sizeof(sbs_data_t));
-        lastCyclesLeft = -1;
-        lastCyclesTotal = -1;
-        lastIsRunning = !isRunning;
+        memset(&lastSbsData, 0xFF, sizeof(sbs_data_t));
+        lastCyclesLeft = 255; lastCyclesTotal = 255; lastIsRunning = !isRunning;
     }
 
-    // Update top status bar only if something changes
     if (cyclesLeft != lastCyclesLeft || cyclesTotal != lastCyclesTotal || isRunning != lastIsRunning) {
         sprintf(buf, isRunning ? "CYCLES %d/%d LEFT" : "CYCLES %d", cyclesLeft, cyclesTotal);
         tft.fillRect(0, 0, 240, 30, isRunning ? COLOR_DARK_GREEN : COLOR_BLACK);
         tft.setCursor(5, 8); tft.setTextSize(2); tft.setTextColor(COLOR_WHITE); tft.print(buf);
     }
 
-    // Update data fields only if values have changed
     if (sbsData.voltage != lastSbsData.voltage) {
         sprintf(buf, "%1.2f V", sbsData.voltage / 1000.0);
         drawField(0, 32, 120, 30, buf, COLOR_DARK_BLUE, COLOR_WHITE, 2);
@@ -162,7 +154,6 @@ void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyc
         drawStatusBits(45, 303, sbsData.batteryMode);
     }
 
-    // Store current state for next comparison
     lastSbsData = sbsData;
     lastCyclesLeft = cyclesLeft;
     lastCyclesTotal = cyclesTotal;
@@ -203,7 +194,6 @@ void drawSettingsScreen(int8_t selectedItem, bool editMode, bool fullRedraw) {
         uint16_t values[] = { s.cyclesCount, s.devicePingTimeout, s.pauseAfterCharge, s.pauseAfterDischarge, s.smbusReadTimeout, s.demoChargeTime, s.demoDischargeTime, s.serialOutputTimeout };
         tft.setTextSize(2);
 
-        // Redraw old item if it's different from the new one
         if (selectedItem != oldSettingsMenuSelection) {
             uint16_t old_values[] = { s.cyclesCount, s.devicePingTimeout, s.pauseAfterCharge, s.pauseAfterDischarge, s.smbusReadTimeout, s.demoChargeTime, s.demoDischargeTime, s.serialOutputTimeout };
             tft.setCursor(5, 5 + oldSettingsMenuSelection * 32);
@@ -213,7 +203,6 @@ void drawSettingsScreen(int8_t selectedItem, bool editMode, bool fullRedraw) {
             tft.print(buf);
         }
 
-        // Redraw new/current item
         uint16_t fgColor = COLOR_BLACK;
         uint16_t bgColor = editMode ? COLOR_RED : COLOR_WHITE;
         tft.setCursor(5, 5 + selectedItem * 32);
