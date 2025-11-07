@@ -91,19 +91,19 @@ bool readSBSData(sbs_data_t& data) {
   return success;
 }
 
-void generateDemoData(sbs_data_t& data, uint8_t state) {
+void generateDemoData(sbs_data_t& data, TrainerState state) {
     static unsigned long demoTimer = 0;
     static float fakeVoltage = 12500; // in mV
     static float fakeCapacity = 2000; // in mAh
     Settings& s = getSettings();
 
     if (millis() - demoTimer > 1000) { // Update once per second
-        if (state == 1) { // Discharging
+        if (state == DISCHARGING) {
             fakeVoltage -= (float)s.demoDischargeTime * 10;
             fakeCapacity -= (float)s.demoDischargeTime * 5;
             if (fakeVoltage < 10000) fakeVoltage = 10000;
             if (fakeCapacity < 0) fakeCapacity = 0;
-        } else if (state == 3) { // Charging
+        } else if (state == CHARGING) {
             fakeVoltage += (float)s.demoChargeTime * 10;
             fakeCapacity += (float)s.demoChargeTime * 5;
             if (fakeVoltage > 14800) fakeVoltage = 14800;
@@ -113,7 +113,7 @@ void generateDemoData(sbs_data_t& data, uint8_t state) {
     }
 
     data.voltage = fakeVoltage;
-    data.current = (state == 1) ? -1500 : (state == 3) ? 1500 : 0;
+    data.current = (state == DISCHARGING) ? -1500 : (state == CHARGING) ? 1500 : 0;
     data.temperature = 2981; // 25 C in Kelvin * 10
     data.maxError = 2;
     data.remainingCapacity = fakeCapacity;
@@ -130,12 +130,12 @@ void generateDemoData(sbs_data_t& data, uint8_t state) {
 
     // Simulate status flags
     data.batteryMode = 0x0001; // Internal Charge Controller
-    if (state == 1 && fakeCapacity < 100) {
+    if (state == DISCHARGING && fakeCapacity < 100) {
         data.batteryStatus = (1 << 5); // Fully Discharged
-    } else if (state == 3 && fakeCapacity > 2100) {
+    } else if (state == CHARGING && fakeCapacity > 2100) {
         data.batteryStatus = (1 << 4); // Fully Charged
     } else {
-        data.batteryStatus = (state == 1) ? (1 << 6) : 0; // Discharging bit
+        data.batteryStatus = (state == DISCHARGING) ? (1 << 6) : 0; // Discharging bit
     }
 
     data.dataValid = true;
