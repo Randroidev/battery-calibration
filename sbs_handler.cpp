@@ -123,10 +123,11 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
     data.cycleCount = 42;
     data.designVoltage = 14800;
     data.designCapacity = 2200;
-    data.cellVoltage1 = data.voltage / 4;
-    data.cellVoltage2 = data.voltage / 4;
-    data.cellVoltage3 = data.voltage / 4;
-    data.cellVoltage4 = data.voltage / 4;
+    // Provide more realistic, slightly unbalanced cell voltages
+    data.cellVoltage1 = (state == CHARGING) ? fakeVoltage / 4 + 50 : fakeVoltage / 4 - 20;
+    data.cellVoltage2 = (state == CHARGING) ? fakeVoltage / 4 - 30 : fakeVoltage / 4 + 10;
+    data.cellVoltage3 = (state == CHARGING) ? fakeVoltage / 4 + 10 : fakeVoltage / 4 - 40;
+    data.cellVoltage4 = fakeVoltage - data.cellVoltage1 - data.cellVoltage2 - data.cellVoltage3;
 
     // Simulate status flags
     data.batteryMode = 0x0001; // Internal Charge Controller

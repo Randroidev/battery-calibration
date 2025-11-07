@@ -9,7 +9,7 @@
 #define COLOR_RED           0xF800
 #define COLOR_DARK_GREEN    0x03E0
 #define COLOR_BLACK         ILI9341_BLACK
-#define COLOR_WHITE         ILI9341_WHITE
+#define COLOR_WHITE         ILI9-341_WHITE
 #define COLOR_GREY          0x8410
 
 // =================== OBJECTS ===================
@@ -38,7 +38,7 @@ void drawMainMenu(int8_t selectedItem) {
     } else {
       tft.setTextColor(COLOR_WHITE, COLOR_BLACK);
     }
-    tft.setCursor(50, 60 + i * 50);
+    tft.setCursor(50, 80 + i * 50);
     tft.println(menuItems[i]);
   }
 }
@@ -59,23 +59,32 @@ void drawStatusBits(int16_t x, int16_t y, uint16_t statusWord) {
     for (int i = 0; i < 16; i++) {
         // Bit is 1: RED, Bit is 0: GREEN
         uint16_t color = (statusWord >> i) & 0x01 ? COLOR_RED : COLOR_DARK_GREEN;
-        tft.fillRect(x + i * 15, y, 12, 12, color);
+        tft.fillRect(x + i * 15, y, 13, 13, color);
+        tft.drawRect(x + i * 15, y, 13, 13, COLOR_GREY);
     }
 }
 
-void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyclesTotal) {
+void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyclesTotal, bool isRunning) {
     char buf[30]; // Buffer for formatting strings
+    tft.fillScreen(COLOR_BLACK);
 
     // Top status bar for cycles
-    tft.fillRect(0, 0, 240, 30, COLOR_BLACK);
     tft.setTextColor(COLOR_WHITE);
     tft.setTextSize(2);
-    tft.setCursor(10, 8);
-    sprintf(buf, "CYCLES [%d] / [%d] LEFT", cyclesTotal, cyclesLeft);
+    tft.setCursor(5, 8);
+    // Format: CYCLES 2/10 LEFT or CYCLES 10 (if not running)
+    if (isRunning) {
+        sprintf(buf, "CYCLES %d/%d LEFT", cyclesLeft, cyclesTotal);
+    } else {
+        sprintf(buf, "CYCLES %d", cyclesTotal);
+    }
+    tft.fillRect(0, 0, 240, 30, isRunning ? COLOR_DARK_GREEN : COLOR_BLACK);
+    tft.setCursor(5, 8);
     tft.print(buf);
 
+
     // If data is invalid (e.g., battery disconnected), show a warning and stop.
-    if (!sbsData.dataValid) {
+    if (!sbsData.dataValid && isRunning) {
         drawField(10, 140, 220, 40, "N/A - NO CONNECTION", COLOR_RED, COLOR_WHITE, 2);
         return;
     }
@@ -88,58 +97,57 @@ void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyc
 
     // Temperature | MaxError
     sprintf(buf, "%1.2f C", (sbsData.temperature / 10.0) - 273.15);
-    drawField(0, 62, 120, 30, buf, COLOR_YELLOW, COLOR_BLACK, 2);
+    drawField(0, 64, 120, 30, buf, COLOR_YELLOW, COLOR_BLACK, 2);
     sprintf(buf, "%d %%", sbsData.maxError);
-    drawField(120, 62, 120, 30, buf, COLOR_RED, COLOR_WHITE, 2);
+    drawField(120, 64, 120, 30, buf, COLOR_RED, COLOR_WHITE, 2);
 
     // Remaining Capacity
     sprintf(buf, "Rem. Cap: %d mAh", sbsData.remainingCapacity);
-    drawField(0, 92, 240, 25, buf, COLOR_BLACK, COLOR_WHITE, 2);
+    drawField(0, 96, 240, 30, buf, COLOR_BLACK, COLOR_WHITE, 2);
 
     // Full Charge Capacity
     sprintf(buf, "Full Cap: %d mAh", sbsData.fullChargeCapacity);
-    drawField(0, 117, 240, 25, buf, COLOR_BLACK, COLOR_WHITE, 2);
+    drawField(0, 128, 240, 30, buf, COLOR_BLACK, COLOR_WHITE, 2);
 
     // Charging Voltage / Current
     sprintf(buf, "Chg: %1.2fV %1.2fA", sbsData.chargingVoltage / 1000.0, sbsData.chargingCurrent / 1000.0);
-    drawField(0, 142, 240, 30, buf, COLOR_DARK_GREEN, COLOR_WHITE, 2);
+    drawField(0, 160, 240, 30, buf, COLOR_DARK_GREEN, COLOR_WHITE, 2);
 
     // Cycle Count
     sprintf(buf, "Cycles: %d", sbsData.cycleCount);
-    drawField(0, 172, 240, 25, buf, COLOR_BLACK, COLOR_WHITE, 2);
+    drawField(0, 192, 240, 30, buf, COLOR_BLACK, COLOR_WHITE, 2);
 
     // Design Voltage / Capacity
     sprintf(buf, "Design: %1.2fV %dmAh", sbsData.designVoltage / 1000.0, sbsData.designCapacity);
-    drawField(0, 197, 240, 25, buf, COLOR_BLACK, COLOR_WHITE, 2);
+    drawField(0, 224, 240, 30, buf, COLOR_BLACK, COLOR_WHITE, 2);
 
     // Cell Voltages
     sprintf(buf, "%1.2fV", sbsData.cellVoltage1 / 1000.0);
-    drawField(0, 224, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
+    drawField(0, 256, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
     sprintf(buf, "%1.2fV", sbsData.cellVoltage2 / 1000.0);
-    drawField(60, 224, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
+    drawField(60, 256, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
     sprintf(buf, "%1.2fV", sbsData.cellVoltage3 / 1000.0);
-    drawField(120, 224, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
+    drawField(120, 256, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
     sprintf(buf, "%1.2fV", sbsData.cellVoltage4 / 1000.0);
-    drawField(180, 224, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
+    drawField(180, 256, 60, 25, buf, COLOR_DARK_BLUE, COLOR_WHITE, 1);
 
     // Battery Status & Mode bits
-    tft.fillRect(0, 252, 240, 68, COLOR_BLACK);
     tft.setTextColor(COLOR_WHITE);
     tft.setTextSize(1);
-    tft.setCursor(5, 255);
-    tft.print("Battery Status:");
-    drawStatusBits(5, 265, sbsData.batteryStatus);
-    tft.setCursor(5, 285);
-    tft.print("Battery Mode:");
-    drawStatusBits(5, 295, sbsData.batteryMode);
+    tft.setCursor(2, 285);
+    tft.print("Status:");
+    drawStatusBits(45, 283, sbsData.batteryStatus);
+    tft.setCursor(2, 305);
+    tft.print("Mode:");
+    drawStatusBits(45, 303, sbsData.batteryMode);
 }
 
 void drawDevicePingScreen(const sbs_data_t& sbsData, bool isConnected) {
-    tft.fillScreen(COLOR_BLACK);
     if (isConnected) {
         // Reuse the cycles screen to display all available data
-        drawCyclesScreen(sbsData, 0, 0);
+        drawCyclesScreen(sbsData, 0, 0, true);
     } else {
+        tft.fillScreen(COLOR_BLACK);
         drawField(10, 140, 220, 40, "Device not connected", COLOR_RED, COLOR_WHITE, 2);
     }
 }

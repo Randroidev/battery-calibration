@@ -28,7 +28,7 @@
 #include "GyverEncoder.h"
 
 // =================== GLOBAL OBJECTS ===================
-Encoder enc(ENC_S1_PIN, ENC_S2_PIN, ENC_KEY_PIN, ENC_TYPE_STEP2);
+Encoder enc(ENC_S1_PIN, ENC_S2_PIN, ENC_KEY_PIN, ENC_TYPE_STEP4_FULL);
 sbs_data_t sbsData; // Struct to hold all battery data
 
 // =================== PROGRAM STATE ===================
@@ -45,6 +45,7 @@ Screen currentScreen = MAIN_MENU;
 int8_t mainMenuSelection = 0;
 int8_t settingsMenuSelection = 0;
 bool settingsEditMode = false;
+uint8_t cyclesToRun = 0;
 
 // Timers for non-blocking operations
 unsigned long sbsReadTimer = 0;
@@ -67,6 +68,7 @@ void setup() {
 
   // Load settings from EEPROM
   loadSettings();
+  cyclesToRun = getSettings().cyclesCount;
 
   // Initialize hardware and modules
   initDisplay();
@@ -115,7 +117,7 @@ void loop() {
       switch(currentScreen) {
           case CYCLES_SCREEN:
           case DEMO_SCREEN:
-              drawCyclesScreen(sbsData, getCyclesLeft(), isProcessRunning() ? getSettings().cyclesCount : 0);
+              drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning());
               break;
           case DEVICE_PING_SCREEN:
               drawDevicePingScreen(sbsData, sbsData.dataValid);
@@ -142,27 +144,31 @@ void handleEncoder() {
 
     bool needsRedraw = false;
 
-    // Handle rotation left
+    // Handle rotation left (moves selection DOWN)
     if (enc.isLeft()) {
-        if (currentScreen == MAIN_MENU) {
-            mainMenuSelection = (mainMenuSelection > 0) ? mainMenuSelection - 1 : 3;
-            needsRedraw = true;
-        } else if (currentScreen == SETTINGS_SCREEN) {
-            if (settingsEditMode) update_settings_value(-1); // Edit value
-            else settingsMenuSelection = (settingsMenuSelection > 0) ? settingsMenuSelection - 1 : 9; // Navigate menu
-            needsRedraw = true;
-        }
-    }
-
-    // Handle rotation right
-    if (enc.isRight()) {
         if (currentScreen == MAIN_MENU) {
             mainMenuSelection = (mainMenuSelection < 3) ? mainMenuSelection + 1 : 0;
             needsRedraw = true;
         } else if (currentScreen == SETTINGS_SCREEN) {
-            if (settingsEditMode) update_settings_value(1); // Edit value
+            if (settingsEditMode) update_settings_value(1); // Increase value
             else settingsMenuSelection = (settingsMenuSelection < 9) ? settingsMenuSelection + 1 : 0; // Navigate menu
             needsRedraw = true;
+        } else if ((currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) && !isProcessRunning()) {
+            cyclesToRun = (cyclesToRun < 99) ? cyclesToRun + 1 : 99;
+        }
+    }
+
+    // Handle rotation right (moves selection UP)
+    if (enc.isRight()) {
+        if (currentScreen == MAIN_MENU) {
+            mainMenuSelection = (mainMenuSelection > 0) ? mainMenuSelection - 1 : 3;
+            needsRedraw = true;
+        } else if (currentScreen == SETTINGS_SCREEN) {
+            if (settingsEditMode) update_settings_value(-1); // Decrease value
+            else settingsMenuSelection = (settingsMenuSelection > 0) ? settingsMenuSelection - 1 : 9; // Navigate menu
+            needsRedraw = true;
+        } else if ((currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) && !isProcessRunning()) {
+            cyclesToRun = (cyclesToRun > 0) ? cyclesToRun - 1 : 0;
         }
     }
 
@@ -172,8 +178,9 @@ void handleEncoder() {
             case MAIN_MENU:
                 // Enter the selected screen
                 currentScreen = (Screen)(mainMenuSelection + 1); // Maps menu item to screen enum
+                cyclesToRun = getSettings().cyclesCount; // Reset cycles to setting value
                 if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) {
-                    drawCyclesScreen(sbsData, getSettings().cyclesCount, 0); // Initial draw
+                    drawCyclesScreen(sbsData, 0, cyclesToRun, false); // Initial draw
                 } else if (currentScreen == DEVICE_PING_SCREEN) {
                     readSBSData(sbsData); // Initial read
                     drawDevicePingScreen(sbsData, sbsData.dataValid);
@@ -187,7 +194,7 @@ void handleEncoder() {
             case CYCLES_SCREEN:
             case DEMO_SCREEN:
                  // Start or stop the training process
-                 startStopProcess(getSettings().cyclesCount);
+                 startStopProcess(cyclesToRun);
                  break;
 
             case DEVICE_PING_SCREEN:
@@ -200,6 +207,7 @@ void handleEncoder() {
                 if (settingsMenuSelection == 8) { // RESET is now item 8
                     resetSettings();
                 } else if (settingsMenuSelection == 9) { // RETURN is now item 9
+                    getSettings().cyclesCount = cyclesToRun; // Save cycles count on exit
                     saveSettings();
                     currentScreen = MAIN_MENU;
                 } else {
@@ -224,14 +232,16 @@ void handleEncoder() {
 // =================== SETTINGS HELPER ===================
 void update_settings_value(int amount) {
     Settings& s = getSettings();
+    // Invert amount because left rotation now means +1
+    int value = amount * -1;
     switch (settingsMenuSelection) {
-        case 0: s.cyclesCount = constrain(s.cyclesCount + amount, 0, 99); break;
-        case 1: s.devicePingTimeout = constrain(s.devicePingTimeout + amount, 0, 99); break;
-        case 2: s.pauseAfterCharge = constrain(s.pauseAfterCharge + amount, 0, 999); break;
-        case 3: s.pauseAfterDischarge = constrain(s.pauseAfterDischarge + amount, 0, 999); break;
-        case 4: s.smbusReadTimeout = constrain(s.smbusReadTimeout + amount, 0, 99); break;
-        case 5: s.demoChargeTime = constrain(s.demoChargeTime + amount, 0, 99); break;
-        case 6: s.demoDischargeTime = constrain(s.demoDischargeTime + amount, 0, 99); break;
-        case 7: s.serialOutputTimeout = constrain(s.serialOutputTimeout + amount, 0, 99); break;
+        case 0: s.cyclesCount = constrain(s.cyclesCount + value, 0, 99); cyclesToRun = s.cyclesCount; break;
+        case 1: s.devicePingTimeout = constrain(s.devicePingTimeout + value, 0, 99); break;
+        case 2: s.pauseAfterCharge = constrain(s.pauseAfterCharge + value, 0, 999); break;
+        case 3: s.pauseAfterDischarge = constrain(s.pauseAfterDischarge + value, 0, 999); break;
+        case 4: s.smbusReadTimeout = constrain(s.smbusReadTimeout + value, 0, 99); break;
+        case 5: s.demoChargeTime = constrain(s.demoChargeTime + value, 0, 99); break;
+        case 6: s.demoDischargeTime = constrain(s.demoDischargeTime + value, 0, 99); break;
+        case 7: s.serialOutputTimeout = constrain(s.serialOutputTimeout + value, 0, 99); break;
     }
 }
