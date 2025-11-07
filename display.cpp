@@ -1,26 +1,27 @@
 #include "display.h"
 #include "config.h"
 #include "settings.h"
+#include <Adafruit_ST7789.h>
 
 // =================== COLOR DEFINITIONS ===================
 #define COLOR_DARK_BLUE     0x001F
 #define COLOR_MAROON        0x7800
-#define COLOR_YELLOW        0xFFE0
-#define COLOR_RED           0xF800
+#define COLOR_YELLOW        ST7789_YELLOW
+#define COLOR_RED           ST7789_RED
 #define COLOR_DARK_GREEN    0x03E0
-#define COLOR_BLACK         ILI9341_BLACK
-#define COLOR_WHITE         ILI9341_WHITE
+#define COLOR_BLACK         ST7789_BLACK
+#define COLOR_WHITE         ST7789_WHITE
 #define COLOR_GREY          0x8410
 
 // =================== OBJECTS ===================
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
+Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 
 // =================== MENU ITEMS ===================
 const char* menuItems[] = {"Cycles", "Device Ping", "Settings", "Demo"};
 
 // =================== INITIALIZATION ===================
 void initDisplay() {
-  tft.begin();
+  tft.init(240, 320); // Init ST7789 240x320
   tft.setRotation(1); // Portrait orientation
   tft.fillScreen(COLOR_BLACK);
 }
@@ -159,8 +160,8 @@ void drawSettingsScreen(int8_t selectedItem, bool editMode) {
     char buf[30];
 
     const char* labels[] = {
-        "Cycles Count", "Ping Timeout (s)", "Pause Chg (min)", "Pause Dis (min)",
-        "SMBus Timeout (s)", "Demo Chg (s)", "Demo Dis (s)", "Serial Timeout (s)",
+        "Cycles", "Ping Timeout", "Pause Chg", "Pause Dis",
+        "SMBus Timeout", "Demo Chg", "Demo Dis", "Serial Out",
         "RESET", "RETURN"
     };
 
@@ -185,7 +186,7 @@ void drawSettingsScreen(int8_t selectedItem, bool editMode) {
         tft.setTextColor(fgColor, bgColor);
 
         if (i < 8) { // Settings with values
-            sprintf(buf, "%-20s %-3d", labels[i], values[i]);
+            sprintf(buf, "%-15s %-3d", labels[i], values[i]);
         } else { // RESET and RETURN
             sprintf(buf, "%s", labels[i]);
         }

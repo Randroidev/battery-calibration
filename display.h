@@ -1,9 +1,8 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_ILI9341.h>
-#include "sbs_handler.h"
+#include "types.h"
+#include <Adafruit_ST7789.h>
 
 void initDisplay();
 void drawMainMenu(int8_t selectedItem);

@@ -118,8 +118,8 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
     data.maxError = 2;
     data.remainingCapacity = fakeCapacity;
     data.fullChargeCapacity = 2200;
-    data.chargingCurrent = (state == 3) ? 1500 : 0;
-    data.chargingVoltage = (state == 3) ? 14800 : 0;
+    data.chargingCurrent = (state == CHARGING) ? 1500 : 0;
+    data.chargingVoltage = (state == CHARGING) ? 14800 : 0;
     data.cycleCount = 42;
     data.designVoltage = 14800;
     data.designCapacity = 2200;

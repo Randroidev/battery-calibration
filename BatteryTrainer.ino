@@ -28,7 +28,7 @@
 #include "GyverEncoder.h"
 
 // =================== GLOBAL OBJECTS ===================
-Encoder enc(ENC_S1_PIN, ENC_S2_PIN, ENC_KEY_PIN, ENC_TYPE_STEP4_FULL);
+Encoder enc(ENC_S1_PIN, ENC_S2_PIN, ENC_KEY_PIN, ENC_TYPE_STEP2);
 sbs_data_t sbsData; // Struct to hold all battery data
 
 // =================== PROGRAM STATE ===================
