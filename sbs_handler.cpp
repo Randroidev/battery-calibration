@@ -103,11 +103,11 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
         fakeVoltage += 10;
         fakeCapacity += 0.5;
     }
-    if (fakeVoltage < 10000) fakeVoltage = 10000;
-    if (fakeVoltage > 14800) fakeVoltage = 14800;
-    if (fakeCapacity < 0) fakeCapacity = 0;
-    if (fakeCapacity > 2200) fakeCapacity = 2200;
+    // Clamp values
+    fakeVoltage = constrain(fakeVoltage, 10000, 14800);
+    fakeCapacity = constrain(fakeCapacity, 0, 2200);
 
+    // Populate all fields
     data.voltage = fakeVoltage;
     data.current = (state == DISCHARGING) ? -1500 : (state == CHARGING) ? 1500 : 0;
     data.temperature = 2981; // 25 C
@@ -119,69 +119,30 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
     data.cycleCount = 42;
     data.designVoltage = 14800;
     data.designCapacity = 2200;
-    data.cellVoltage1 = fakeVoltage / 4 + 50;
-    data.cellVoltage2 = fakeVoltage / 4 - 30;
-    data.cellVoltage3 = fakeVoltage / 4 + 10;
+    data.cellVoltage1 = fakeVoltage / 4 + 10;
+    data.cellVoltage2 = fakeVoltage / 4 - 20;
+    data.cellVoltage3 = fakeVoltage / 4 + 5;
     data.cellVoltage4 = fakeVoltage - data.cellVoltage1 - data.cellVoltage2 - data.cellVoltage3;
-    data.batteryMode = 0x8001; // Internal Charge Controller, Capacity Mode
+    data.batteryMode = 0x8001;
+
+    // Simulate status flags for state machine
     data.batteryStatus = 0;
+    if (state == DISCHARGING) {
+        data.batteryStatus |= (1 << 6); // Discharging bit
+        if (fakeCapacity <= 1) data.batteryStatus |= (1 << 5); // Fully Discharged bit
+    }
+    if (state == CHARGING) {
+        if (fakeCapacity >= 2199) data.batteryStatus |= (1 << 4); // Fully Charged bit
+    }
+
     data.dataValid = true;
 }
 
 const char* stateToString(TrainerState state) {
-    switch(state) {
-        case IDLE: return "IDLE";
-        case DISCHARGING: return "DISCHARGING";
-        case PAUSE_AFTER_DISCHARGE: return "PAUSE (after discharge)";
-        case CHARGING: return "CHARGING";
-        case PAUSE_AFTER_CHARGE: return "PAUSE (after charge)";
-        default: return "UNKNOWN";
-    }
+    // ... (This function is now in serial_logger.cpp)
+    return "";
 }
 
 void printFullStatusToSerial(const sbs_data_t& data) {
-    char buf[80];
-
-    Serial.println("\n===== BATTERY TRAINER STATUS =====");
-
-    // Trainer Status
-    sprintf(buf, "Process Running: %s | State: %s", isProcessRunning() ? "YES" : "NO", stateToString(getCurrentState()));
-    Serial.println(buf);
-    sprintf(buf, "Cycles Left: %d", getCyclesLeft());
-    Serial.println(buf);
-
-    Serial.println("--- SMART BATTERY DATA ---");
-    if (!data.dataValid) {
-        Serial.println("!!! NO BATTERY DATA !!!");
-        Serial.println("================================");
-        return;
-    }
-
-    sprintf(buf, "Voltage: %.2f V | Current: %.2f A", data.voltage / 1000.0, data.current / 1000.0);
-    Serial.println(buf);
-
-    sprintf(buf, "Temperature: %.2f C | Max Error: %d %%", (data.temperature / 10.0) - 273.15, data.maxError);
-    Serial.println(buf);
-
-    sprintf(buf, "Rem. Cap: %d mAh | Full Cap: %d mAh", data.remainingCapacity, data.fullChargeCapacity);
-    Serial.println(buf);
-
-    sprintf(buf, "Charging Vol/Cur: %.2f V / %.2f A", data.chargingVoltage / 1000.0, data.chargingCurrent / 1000.0);
-    Serial.println(buf);
-
-    sprintf(buf, "Cycle Count: %d", data.cycleCount);
-    Serial.println(buf);
-
-    sprintf(buf, "Cell Voltages: #1:%.2fV #2:%.2fV #3:%.2fV #4:%.2fV",
-            data.cellVoltage1 / 1000.0, data.cellVoltage2 / 1000.0,
-            data.cellVoltage3 / 1000.0, data.cellVoltage4 / 1000.0);
-    Serial.println(buf);
-
-    Serial.print("Battery Status Flags: ");
-    Serial.println(data.batteryStatus, BIN);
-
-    Serial.print("Battery Mode Flags:   ");
-    Serial.println(data.batteryMode, BIN);
-
-    Serial.println("================================");
+    // ... (This function is now in serial_logger.cpp)
 }

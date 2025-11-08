@@ -5,11 +5,9 @@
 
 static TrainerState currentState = IDLE;
 static uint8_t cyclesLeft = 0;
-static uint8_t totalCycles = 0;
 static unsigned long phaseTimer = 0;
 static bool processRunning = false;
 
-// Function to set all indicators and relays off
 void allOff() {
     digitalWrite(LED_DISCHARGE_PIN, LOW);
     digitalWrite(LED_PAUSE_DISCHARGE_PIN, LOW);
@@ -20,102 +18,80 @@ void allOff() {
 }
 
 void initStateMachine() {
-  pinMode(LED_DISCHARGE_PIN, OUTPUT);
-  pinMode(LED_PAUSE_DISCHARGE_PIN, OUTPUT);
-  pinMode(LED_CHARGE_PIN, OUTPUT);
-  pinMode(LED_PAUSE_CHARGE_PIN, OUTPUT);
-  pinMode(RELAY_DISCHARGE_PIN, OUTPUT);
-  pinMode(RELAY_CHARGE_PIN, OUTPUT);
-  allOff();
+    pinMode(LED_DISCHARGE_PIN, OUTPUT);
+    pinMode(LED_PAUSE_DISCHARGE_PIN, OUTPUT);
+    pinMode(LED_CHARGE_PIN, OUTPUT);
+    pinMode(LED_PAUSE_CHARGE_PIN, OUTPUT);
+    pinMode(RELAY_DISCHARGE_PIN, OUTPUT);
+    pinMode(RELAY_CHARGE_PIN, OUTPUT);
+    allOff();
 }
 
 void startStopProcess(uint8_t cycles) {
-  processRunning = !processRunning;
-  if (processRunning) {
-    if (cycles > 0) {
-      cyclesLeft = cycles;
-      totalCycles = cycles;
-      currentState = DISCHARGING;
-      phaseTimer = millis();
+    processRunning = !processRunning;
+    if (processRunning && cycles > 0) {
+        cyclesLeft = cycles;
+        currentState = DISCHARGING;
+        phaseTimer = millis();
     } else {
-      processRunning = false;
+        processRunning = false;
+        currentState = IDLE;
+        allOff();
     }
-  } else {
-    currentState = IDLE;
-    allOff();
-  }
 }
 
 void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
-  if (!processRunning) {
-    currentState = IDLE;
-    allOff();
-    return;
-  }
+    if (!processRunning) return;
 
-  Settings& s = getSettings();
+    Settings& s = getSettings();
+    unsigned long chargeTime = isDemoMode ? (unsigned long)s.demoChargeTime * 1000 : 0;
+    unsigned long dischargeTime = isDemoMode ? (unsigned long)s.demoDischargeTime * 1000 : 0;
+    unsigned long pauseTime = isDemoMode ? (unsigned long)s.demoDischargeTime * 1000 : (unsigned long)s.pauseAfterDischarge * 60000;
 
-  switch(currentState) {
-    case IDLE:
-      allOff();
-      break;
-
-    case DISCHARGING:
-      allOff();
-      digitalWrite(LED_DISCHARGE_PIN, HIGH);
-      digitalWrite(RELAY_DISCHARGE_PIN, HIGH);
-      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoDischargeTime * 1000) ||
-          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 5)))) {
-        currentState = PAUSE_AFTER_DISCHARGE;
-        phaseTimer = millis();
-      }
-      break;
-
-    case PAUSE_AFTER_DISCHARGE:
-      allOff();
-      digitalWrite(LED_PAUSE_DISCHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterDischarge * 60000)) {
-        currentState = CHARGING;
-        phaseTimer = millis();
-      }
-      break;
-
-    case CHARGING:
-      allOff();
-      digitalWrite(LED_CHARGE_PIN, HIGH);
-      digitalWrite(RELAY_CHARGE_PIN, HIGH);
-      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoChargeTime * 1000) ||
-          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 4)))) {
-        currentState = PAUSE_AFTER_CHARGE;
-        phaseTimer = millis();
-      }
-      break;
-
-    case PAUSE_AFTER_CHARGE:
-      allOff();
-      digitalWrite(LED_PAUSE_CHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterCharge * 60000)) {
-        cyclesLeft--;
-        if (cyclesLeft > 0) {
-          currentState = DISCHARGING;
-          phaseTimer = millis();
-        } else {
-          currentState = IDLE;
-          processRunning = false;
-        }
-      }
-      break;
-  }
+    switch(currentState) {
+        case DISCHARGING:
+            digitalWrite(RELAY_CHARGE_PIN, LOW);
+            digitalWrite(RELAY_DISCHARGE_PIN, HIGH);
+            if ((isDemoMode && millis() - phaseTimer > dischargeTime) || (!isDemoMode && (sbsData.batteryStatus & (1 << 5)))) {
+                currentState = PAUSE_AFTER_DISCHARGE;
+                phaseTimer = millis();
+            }
+            break;
+        case PAUSE_AFTER_DISCHARGE:
+            allOff();
+            if (millis() - phaseTimer > pauseTime) {
+                currentState = CHARGING;
+                phaseTimer = millis();
+            }
+            break;
+        case CHARGING:
+            digitalWrite(RELAY_DISCHARGE_PIN, LOW);
+            digitalWrite(RELAY_CHARGE_PIN, HIGH);
+            if ((isDemoMode && millis() - phaseTimer > chargeTime) || (!isDemoMode && (sbsData.batteryStatus & (1 << 4)))) {
+                currentState = PAUSE_AFTER_CHARGE;
+                phaseTimer = millis();
+            }
+            break;
+        case PAUSE_AFTER_CHARGE:
+            allOff();
+            if (millis() - phaseTimer > (isDemoMode ? (unsigned long)s.demoChargeTime * 1000 : (unsigned long)s.pauseAfterCharge * 60000)) {
+                cyclesLeft--;
+                if (cyclesLeft > 0) {
+                    currentState = DISCHARGING;
+                    phaseTimer = millis();
+                } else {
+                    processRunning = false;
+                    currentState = IDLE;
+                }
+            }
+            break;
+        case IDLE:
+        default:
+            allOff();
+            break;
+    }
 }
 
-TrainerState getCurrentState() {
-  return currentState;
-}
-
-uint8_t getCyclesLeft() {
-    return cyclesLeft;
-}
-
-bool isProcessRunning() {
-    return processRunning;
-}
+TrainerState getCurrentState() { return currentState; }
+uint8_t getCyclesLeft() { return cyclesLeft; }
+bool isProcessRunning() { return processRunning; }
