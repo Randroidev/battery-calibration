@@ -137,12 +137,3 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
 
     data.dataValid = true;
 }
-
-const char* stateToString(TrainerState state) {
-    // ... (This function is now in serial_logger.cpp)
-    return "";
-}
-
-void printFullStatusToSerial(const sbs_data_t& data) {
-    // ... (This function is now in serial_logger.cpp)
-}

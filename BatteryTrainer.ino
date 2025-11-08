@@ -96,7 +96,7 @@ void loop() {
 void handleEncoder() {
   long newEncoderPos = myEnc.read();
   if (newEncoderPos != oldEncoderPos) {
-    int direction = (newEncoderPos < oldEncoderPos) ? 1 : -1; // Inverted
+    int direction = (newEncoderPos < oldEncoderPos) ? 1 : -1; // Final Inversion
 
     switch(currentScreen) {
         case MAIN_MENU:

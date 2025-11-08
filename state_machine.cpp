@@ -46,7 +46,6 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     Settings& s = getSettings();
     unsigned long chargeTime = isDemoMode ? (unsigned long)s.demoChargeTime * 1000 : 0;
     unsigned long dischargeTime = isDemoMode ? (unsigned long)s.demoDischargeTime * 1000 : 0;
-    unsigned long pauseTime = isDemoMode ? (unsigned long)s.demoDischargeTime * 1000 : (unsigned long)s.pauseAfterDischarge * 60000;
 
     switch(currentState) {
         case DISCHARGING:
@@ -59,7 +58,7 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
             break;
         case PAUSE_AFTER_DISCHARGE:
             allOff();
-            if (millis() - phaseTimer > pauseTime) {
+            if (millis() - phaseTimer > (isDemoMode ? (unsigned long)s.demoDischargeTime * 1000 : (unsigned long)s.pauseAfterDischarge * 60000)) {
                 currentState = CHARGING;
                 phaseTimer = millis();
             }
