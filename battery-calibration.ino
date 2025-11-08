@@ -132,6 +132,7 @@ void handleEncoder() {
 void handleButton() {
     if (digitalRead(ENC_KEY_PIN) == LOW && millis() - lastButtonPress > 250) {
         lastButtonPress = millis();
+        Screen previousScreen = currentScreen;
 
         switch(currentScreen) {
             case MAIN_MENU:
@@ -155,13 +156,14 @@ void handleButton() {
                 }
                 break;
             case CYCLES_SCREEN:
-                 startStopProcess(cyclesToRun, sbsData.dataValid);
-                 drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
-                 break;
-            case DEMO_SCREEN:
-                 startStopProcess(cyclesToRun, true); // In demo mode, we don't care about the battery
-                 drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
-                 break;
+        case DEMO_SCREEN:
+             if (currentScreen == CYCLES_SCREEN) {
+                startStopProcess(cyclesToRun, sbsData.dataValid);
+             } else {
+                startStopProcess(cyclesToRun, true); // In demo mode, we don't care about the battery
+             }
+             drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
+             break;
             case DEVICE_PING_SCREEN:
                 currentScreen = MAIN_MENU;
                 drawMainMenu(mainMenuSelection, true);
@@ -178,6 +180,12 @@ void handleButton() {
                     drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
                 }
                 break;
+        }
+
+        // If the screen has changed, reset the encoder state
+        if (previousScreen != currentScreen) {
+            myEnc.write(0);
+            oldEncoderPos = -999;
         }
     }
 }
