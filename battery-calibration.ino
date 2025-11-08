@@ -11,6 +11,7 @@
 #include "state_machine.h"
 #include "serial_logger.h"
 #include "Encoder.h"
+#include "demo_data_generator.h"
 
 // =================== GLOBAL OBJECTS ===================
 sbs_data_t sbsData;
