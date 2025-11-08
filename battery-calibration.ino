@@ -101,26 +101,27 @@ void loop() {
 void handleEncoder() {
   long newEncoderPos = myEnc.read() / 4; // Using 4 steps per count for EC11 encoder
   if (newEncoderPos != oldEncoderPos) {
-    int direction = (newEncoderPos > oldEncoderPos) ? 1 : -1;
+    long delta = newEncoderPos - oldEncoderPos;
 
     switch(currentScreen) {
         case MAIN_MENU:
-            mainMenuSelection = (mainMenuSelection + direction + 4) % 4;
+            mainMenuSelection = (mainMenuSelection + delta);
+            mainMenuSelection = (mainMenuSelection % 4 + 4) % 4; // Handle wrap-around correctly
             drawMainMenu(mainMenuSelection, false);
             break;
         case SETTINGS_SCREEN:
             if(settingsEditMode) {
-                update_settings_value(direction);
+                update_settings_value(delta);
             } else {
-                settingsMenuSelection = (settingsMenuSelection + direction + 10) % 10;
+                settingsMenuSelection = (settingsMenuSelection + delta);
+                settingsMenuSelection = (settingsMenuSelection % 10 + 10) % 10; // Handle wrap-around correctly
             }
             drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
             break;
         case CYCLES_SCREEN:
         case DEMO_SCREEN:
             if (!isProcessRunning()) {
-                cyclesToRun = constrain(cyclesToRun + direction, 0, 99);
-                // The third parameter to drawCyclesScreen is cyclesTotal, which we are modifying here
+                cyclesToRun = constrain(cyclesToRun + delta, 0, 99);
                 drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, false, false);
             }
             break;
