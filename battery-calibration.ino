@@ -9,6 +9,7 @@
 #include "display.h"
 #include "sbs_handler.h"
 #include "state_machine.h"
+#include "serial_logger.h"
 #include "Encoder.h"
 
 // =================== GLOBAL OBJECTS ===================
@@ -75,7 +76,12 @@ void loop() {
 
   if (millis() - displayUpdateTimer > 500) {
       displayUpdateTimer = millis();
-      if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) {
+
+      // If the process has just stopped because of a disconnection, show the ping screen
+      if (currentScreen == CYCLES_SCREEN && !isProcessRunning() && !sbsData.dataValid) {
+          currentScreen = DEVICE_PING_SCREEN;
+          drawDevicePingScreen(sbsData, false, true);
+      } else if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) {
         drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), false);
       } else if (currentScreen == DEVICE_PING_SCREEN) {
         drawDevicePingScreen(sbsData, sbsData.dataValid, false);
@@ -86,13 +92,14 @@ void loop() {
     serialOutputTimer = millis();
     if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN || currentScreen == DEVICE_PING_SCREEN) {
         printFullStatusToSerial(sbsData);
+        printKeyValueStatusToSerial(sbsData);
     }
   }
 }
 
 // =================== HANDLERS ===================
 void handleEncoder() {
-  long newEncoderPos = myEnc.read();
+  long newEncoderPos = myEnc.read() / 4; // Using 4 steps per count for EC11 encoder
   if (newEncoderPos != oldEncoderPos) {
     int direction = (newEncoderPos > oldEncoderPos) ? 1 : -1;
 
@@ -113,7 +120,8 @@ void handleEncoder() {
         case DEMO_SCREEN:
             if (!isProcessRunning()) {
                 cyclesToRun = constrain(cyclesToRun + direction, 0, 99);
-                drawCyclesScreen(sbsData, 0, cyclesToRun, false, false);
+                // The third parameter to drawCyclesScreen is cyclesTotal, which we are modifying here
+                drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, false, false);
             }
             break;
     }
@@ -127,14 +135,31 @@ void handleButton() {
 
         switch(currentScreen) {
             case MAIN_MENU:
-                currentScreen = (Screen)(mainMenuSelection + 1);
-                cyclesToRun = getSettings().cyclesCount;
-                if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) drawCyclesScreen(sbsData, 0, cyclesToRun, false, true);
-                else if (currentScreen == DEVICE_PING_SCREEN) { readSBSData(sbsData); drawDevicePingScreen(sbsData, sbsData.dataValid, true); }
-                else if (currentScreen == SETTINGS_SCREEN) drawSettingsScreen(settingsMenuSelection, settingsEditMode, true);
+                // For "Cycles" menu item, first go to ping screen to check connection
+                if (mainMenuSelection == 0) { // "Cycles"
+                    readSBSData(sbsData);
+                    if (sbsData.dataValid) {
+                        currentScreen = CYCLES_SCREEN;
+                        cyclesToRun = getSettings().cyclesCount;
+                        drawCyclesScreen(sbsData, 0, cyclesToRun, false, true);
+                    } else {
+                        currentScreen = DEVICE_PING_SCREEN;
+                        drawDevicePingScreen(sbsData, false, true);
+                    }
+                } else {
+                    currentScreen = (Screen)(mainMenuSelection + 1);
+                    cyclesToRun = getSettings().cyclesCount;
+                    if (currentScreen == DEMO_SCREEN) drawCyclesScreen(sbsData, 0, cyclesToRun, false, true);
+                    else if (currentScreen == DEVICE_PING_SCREEN) { readSBSData(sbsData); drawDevicePingScreen(sbsData, sbsData.dataValid, true); }
+                    else if (currentScreen == SETTINGS_SCREEN) drawSettingsScreen(settingsMenuSelection, settingsEditMode, true);
+                }
                 break;
-            case CYCLES_SCREEN: case DEMO_SCREEN:
-                 startStopProcess(cyclesToRun);
+            case CYCLES_SCREEN:
+                 startStopProcess(cyclesToRun, sbsData.dataValid);
+                 drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
+                 break;
+            case DEMO_SCREEN:
+                 startStopProcess(cyclesToRun, true); // In demo mode, we don't care about the battery
                  drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
                  break;
             case DEVICE_PING_SCREEN:

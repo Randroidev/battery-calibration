@@ -94,24 +94,37 @@ bool readSBSData(sbs_data_t& data) {
 void generateDemoData(sbs_data_t& data, TrainerState state) {
     static float fakeVoltage = 12500;
     static float fakeCapacity = 2000;
+    static uint16_t fakeStatus = 0;
 
-    // Animate voltage and capacity
+    // Animate voltage and capacity based on state
     if (state == DISCHARGING) {
-        fakeVoltage -= 10;
+        fakeVoltage -= 10.0;
         fakeCapacity -= 0.5;
+        if (fakeVoltage <= 10000) {
+            fakeVoltage = 10000;
+            fakeStatus |= 0x0020; // Set "fully discharged"
+        }
     } else if (state == CHARGING) {
-        fakeVoltage += 10;
+        fakeVoltage += 10.0;
         fakeCapacity += 0.5;
+        if (fakeVoltage >= 14800) {
+            fakeVoltage = 14800;
+            fakeStatus |= 0x0010; // Set "fully charged"
+        }
+    } else {
+        // In pause states, clear the flags
+        fakeStatus &= ~0x0030;
     }
-    if (fakeVoltage < 10000) fakeVoltage = 10000;
-    if (fakeVoltage > 14800) fakeVoltage = 14800;
-    if (fakeCapacity < 0) fakeCapacity = 0;
-    if (fakeCapacity > 2200) fakeCapacity = 2200;
 
+    // Clamp values to realistic ranges
+    fakeVoltage = constrain(fakeVoltage, 10000, 14800);
+    fakeCapacity = constrain(fakeCapacity, 0, 2200);
+
+    // Populate all fields of the sbs_data_t struct
     data.voltage = fakeVoltage;
     data.current = (state == DISCHARGING) ? -1500 : (state == CHARGING) ? 1500 : 0;
-    data.temperature = 2981; // 25 C
-    data.maxError = 2;
+    data.temperature = 2981; // 25 C in tenths of a degree Kelvin
+    data.maxError = 2; // 2%
     data.remainingCapacity = fakeCapacity;
     data.fullChargeCapacity = 2200;
     data.chargingCurrent = (state == CHARGING) ? 1500 : 0;
@@ -119,69 +132,18 @@ void generateDemoData(sbs_data_t& data, TrainerState state) {
     data.cycleCount = 42;
     data.designVoltage = 14800;
     data.designCapacity = 2200;
-    data.cellVoltage1 = fakeVoltage / 4 + 50;
-    data.cellVoltage2 = fakeVoltage / 4 - 30;
-    data.cellVoltage3 = fakeVoltage / 4 + 10;
-    data.cellVoltage4 = fakeVoltage - data.cellVoltage1 - data.cellVoltage2 - data.cellVoltage3;
+
+    // Distribute voltage somewhat realistically among cells
+    float cellVolt1 = fakeVoltage / 4 + 50;
+    float cellVolt2 = fakeVoltage / 4 - 30;
+    float cellVolt3 = fakeVoltage / 4 + 10;
+    data.cellVoltage1 = cellVolt1;
+    data.cellVoltage2 = cellVolt2;
+    data.cellVoltage3 = cellVolt3;
+    data.cellVoltage4 = fakeVoltage - cellVolt1 - cellVolt2 - cellVolt3;
+
     data.batteryMode = 0x8001; // Internal Charge Controller, Capacity Mode
-    data.batteryStatus = 0;
+    data.batteryStatus = fakeStatus;
     data.dataValid = true;
 }
 
-const char* stateToString(TrainerState state) {
-    switch(state) {
-        case IDLE: return "IDLE";
-        case DISCHARGING: return "DISCHARGING";
-        case PAUSE_AFTER_DISCHARGE: return "PAUSE (after discharge)";
-        case CHARGING: return "CHARGING";
-        case PAUSE_AFTER_CHARGE: return "PAUSE (after charge)";
-        default: return "UNKNOWN";
-    }
-}
-
-void printFullStatusToSerial(const sbs_data_t& data) {
-    char buf[80];
-
-    Serial.println("\n===== BATTERY TRAINER STATUS =====");
-
-    // Trainer Status
-    sprintf(buf, "Process Running: %s | State: %s", isProcessRunning() ? "YES" : "NO", stateToString(getCurrentState()));
-    Serial.println(buf);
-    sprintf(buf, "Cycles Left: %d", getCyclesLeft());
-    Serial.println(buf);
-
-    Serial.println("--- SMART BATTERY DATA ---");
-    if (!data.dataValid) {
-        Serial.println("!!! NO BATTERY DATA !!!");
-        Serial.println("================================");
-        return;
-    }
-
-    sprintf(buf, "Voltage: %.2f V | Current: %.2f A", data.voltage / 1000.0, data.current / 1000.0);
-    Serial.println(buf);
-
-    sprintf(buf, "Temperature: %.2f C | Max Error: %d %%", (data.temperature / 10.0) - 273.15, data.maxError);
-    Serial.println(buf);
-
-    sprintf(buf, "Rem. Cap: %d mAh | Full Cap: %d mAh", data.remainingCapacity, data.fullChargeCapacity);
-    Serial.println(buf);
-
-    sprintf(buf, "Charging Vol/Cur: %.2f V / %.2f A", data.chargingVoltage / 1000.0, data.chargingCurrent / 1000.0);
-    Serial.println(buf);
-
-    sprintf(buf, "Cycle Count: %d", data.cycleCount);
-    Serial.println(buf);
-
-    sprintf(buf, "Cell Voltages: #1:%.2fV #2:%.2fV #3:%.2fV #4:%.2fV",
-            data.cellVoltage1 / 1000.0, data.cellVoltage2 / 1000.0,
-            data.cellVoltage3 / 1000.0, data.cellVoltage4 / 1000.0);
-    Serial.println(buf);
-
-    Serial.print("Battery Status Flags: ");
-    Serial.println(data.batteryStatus, BIN);
-
-    Serial.print("Battery Mode Flags:   ");
-    Serial.println(data.batteryMode, BIN);
-
-    Serial.println("================================");
-}

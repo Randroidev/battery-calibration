@@ -29,7 +29,9 @@ void initStateMachine() {
   allOff();
 }
 
-void startStopProcess(uint8_t cycles) {
+void startStopProcess(uint8_t cycles, bool isConnected) {
+  if (!isConnected && !isProcessRunning()) return; // Don't start if not connected
+
   processRunning = !processRunning;
   if (processRunning) {
     if (cycles > 0) {
@@ -53,7 +55,20 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     return;
   }
 
+  // If not in demo mode, stop the process if the battery is disconnected.
+  if (!isDemoMode && !sbsData.dataValid) {
+    processRunning = false;
+    currentState = IDLE;
+    allOff();
+    return;
+  }
+
   Settings& s = getSettings();
+  unsigned long demoDischargeDuration = (unsigned long)s.demoDischargeTime * 1000;
+  unsigned long demoChargeDuration = (unsigned long)s.demoChargeTime * 1000;
+  unsigned long realDischargePause = (unsigned long)s.pauseAfterDischarge * 60000;
+  unsigned long realChargePause = (unsigned long)s.pauseAfterCharge * 60000;
+
 
   switch(currentState) {
     case IDLE:
@@ -64,8 +79,8 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
       allOff();
       digitalWrite(LED_DISCHARGE_PIN, HIGH);
       digitalWrite(RELAY_DISCHARGE_PIN, HIGH);
-      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoDischargeTime * 1000) ||
-          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 5)))) {
+      if ((isDemoMode && millis() - phaseTimer > demoDischargeDuration) ||
+          (!isDemoMode && (sbsData.batteryStatus & 0x0020))) { // FULLY_DISCHARGED flag
         currentState = PAUSE_AFTER_DISCHARGE;
         phaseTimer = millis();
       }
@@ -74,7 +89,7 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     case PAUSE_AFTER_DISCHARGE:
       allOff();
       digitalWrite(LED_PAUSE_DISCHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterDischarge * 60000)) {
+      if (millis() - phaseTimer > (isDemoMode ? demoDischargeDuration : realDischargePause)) {
         currentState = CHARGING;
         phaseTimer = millis();
       }
@@ -84,8 +99,8 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
       allOff();
       digitalWrite(LED_CHARGE_PIN, HIGH);
       digitalWrite(RELAY_CHARGE_PIN, HIGH);
-      if ((isDemoMode && millis() - phaseTimer > (unsigned long)s.demoChargeTime * 1000) ||
-          (!isDemoMode && sbsData.dataValid && (sbsData.batteryStatus & (1 << 4)))) {
+      if ((isDemoMode && millis() - phaseTimer > demoChargeDuration) ||
+          (!isDemoMode && (sbsData.batteryStatus & 0x0010))) { // FULLY_CHARGED flag
         currentState = PAUSE_AFTER_CHARGE;
         phaseTimer = millis();
       }
@@ -94,7 +109,7 @@ void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode) {
     case PAUSE_AFTER_CHARGE:
       allOff();
       digitalWrite(LED_PAUSE_CHARGE_PIN, HIGH);
-      if (millis() - phaseTimer > (isDemoMode ? 3000 : (unsigned long)s.pauseAfterCharge * 60000)) {
+      if (millis() - phaseTimer > (isDemoMode ? demoChargeDuration : realChargePause)) {
         cyclesLeft--;
         if (cyclesLeft > 0) {
           currentState = DISCHARGING;

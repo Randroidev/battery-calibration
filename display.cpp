@@ -90,7 +90,7 @@ void drawCyclesScreen(const sbs_data_t& sbsData, uint8_t cyclesLeft, uint8_t cyc
     }
 
     if (cyclesLeft != lastCyclesLeft || cyclesTotal != lastCyclesTotal || isRunning != lastIsRunning) {
-        sprintf(buf, isRunning ? "CYCLES %d/%d LEFT" : "CYCLES %d", cyclesLeft, cyclesTotal);
+        sprintf(buf, isRunning ? "CYCLES %d/%d LEFT" : "CYCLES %d", isRunning ? cyclesLeft : cyclesTotal, cyclesTotal);
         tft.fillRect(0, 0, 240, 30, isRunning ? COLOR_DARK_GREEN : COLOR_BLACK);
         tft.setCursor(5, 8); tft.setTextSize(2); tft.setTextColor(COLOR_WHITE); tft.print(buf);
     }
@@ -166,7 +166,13 @@ void drawDevicePingScreen(const sbs_data_t& sbsData, bool isConnected, bool full
     } else {
         if (fullRedraw) {
             tft.fillScreen(COLOR_BLACK);
-            drawField(10, 140, 220, 40, "Device not connected", COLOR_RED, COLOR_WHITE, 2);
+            tft.setTextSize(2);
+            tft.setTextColor(COLOR_RED);
+            // Manually center the two lines of text
+            tft.setCursor(60, 140); // x = (240 - 10 * 12) / 2
+            tft.print("Device not");
+            tft.setCursor(66, 164); // x = (240 - 9 * 12) / 2
+            tft.print("connected");
         }
     }
 }
