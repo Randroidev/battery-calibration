@@ -10,7 +10,6 @@
 #include "sbs_handler.h"
 #include "state_machine.h"
 #include "serial_logger.h"
-#include "demo_data_generator.h"
 #include "Encoder.h"
 
 // =================== GLOBAL OBJECTS ===================
@@ -33,7 +32,7 @@ unsigned long displayUpdateTimer = 0;
 unsigned long serialOutputTimer = 0;
 
 // =================== ENCODER VARS ===================
-long oldEncoderPos = 0;
+long oldEncoderPos = -999;
 unsigned long lastButtonPress = 0;
 
 // =================== SETUP ===================
