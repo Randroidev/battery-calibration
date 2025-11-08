@@ -10,6 +10,7 @@
 #include "sbs_handler.h"
 #include "state_machine.h"
 #include "serial_logger.h"
+#include "demo_data_generator.h"
 #include "Encoder.h"
 
 // =================== GLOBAL OBJECTS ===================
@@ -32,7 +33,7 @@ unsigned long displayUpdateTimer = 0;
 unsigned long serialOutputTimer = 0;
 
 // =================== ENCODER VARS ===================
-long oldEncoderPos = -999;
+long oldEncoderPos = 0;
 unsigned long lastButtonPress = 0;
 
 // =================== SETUP ===================
@@ -99,34 +100,32 @@ void loop() {
 
 // =================== HANDLERS ===================
 void handleEncoder() {
-  long newEncoderPos = myEnc.read() / 4; // Using 4 steps per count for EC11 encoder
-  if (newEncoderPos != oldEncoderPos) {
-    int direction = (newEncoderPos > oldEncoderPos) ? 1 : -1;
-
-    switch(currentScreen) {
-        case MAIN_MENU:
-            mainMenuSelection = (mainMenuSelection + direction + 4) % 4;
-            drawMainMenu(mainMenuSelection, false);
-            break;
-        case SETTINGS_SCREEN:
-            if(settingsEditMode) {
-                update_settings_value(direction);
-            } else {
-                settingsMenuSelection = (settingsMenuSelection + direction + 10) % 10;
-            }
-            drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
-            break;
-        case CYCLES_SCREEN:
-        case DEMO_SCREEN:
-            if (!isProcessRunning()) {
-                cyclesToRun = constrain(cyclesToRun + direction, 0, 99);
-                // The third parameter to drawCyclesScreen is cyclesTotal, which we are modifying here
-                drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, false, false);
-            }
-            break;
+    long newEncoderPos = myEnc.read() / 4;
+    if (newEncoderPos != oldEncoderPos) {
+        long delta = newEncoderPos - oldEncoderPos;
+        switch(currentScreen) {
+            case MAIN_MENU:
+                mainMenuSelection = (mainMenuSelection + delta + 4) % 4;
+                drawMainMenu(mainMenuSelection, false);
+                break;
+            case SETTINGS_SCREEN:
+                if(settingsEditMode) {
+                    update_settings_value(delta);
+                } else {
+                    settingsMenuSelection = (settingsMenuSelection + delta + 10) % 10;
+                }
+                drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
+                break;
+            case CYCLES_SCREEN:
+            case DEMO_SCREEN:
+                if (!isProcessRunning()) {
+                    cyclesToRun = constrain(cyclesToRun + delta, 0, 99);
+                    drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, false, false);
+                }
+                break;
+        }
+        oldEncoderPos = newEncoderPos;
     }
-    oldEncoderPos = newEncoderPos;
-  }
 }
 
 void handleButton() {
@@ -185,7 +184,7 @@ void handleButton() {
         // If the screen has changed, reset the encoder state
         if (previousScreen != currentScreen) {
             myEnc.write(0);
-            oldEncoderPos = -999;
+            oldEncoderPos = myEnc.read() / 4;
         }
     }
 }
