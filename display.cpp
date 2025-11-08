@@ -174,7 +174,7 @@ void drawDevicePingScreen(const sbs_data_t& sbsData, bool isConnected, bool full
 void drawSettingsScreen(int8_t selectedItem, bool editMode, bool fullRedraw) {
     char buf[30];
     Settings& s = getSettings();
-    const char* labels[] = { "Cycles", "Ping Timeout", "Pause Chg", "Pause Dis", "SMBus Timeout", "Demo Chg", "Demo Dis", "Serial Out", "RESET", "SAVE" };
+    const char* labels[] = { "Cycles", "Ping Timeout", "Pause Chg", "Pause Dis", "SMBus Timeout", "Demo Chg", "Demo Dis", "Serial Out", "RESET", "SAVE"  };
 
     if (fullRedraw) {
         tft.fillScreen(COLOR_BLACK);
