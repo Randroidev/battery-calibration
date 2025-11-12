@@ -1,204 +1,322 @@
 /*
- * Battery Trainer Sketch
+ * Battery Trainer Sketch (Nano Serial Version)
  * Author: Jules
- * Date: 2025-11-07
+ * Date: 2025-11-12
  */
 
 #include "config.h"
 #include "settings.h"
-#include "display.h"
 #include "sbs_handler.h"
 #include "state_machine.h"
 #include "serial_logger.h"
-#include "Encoder.h"
 #include "demo_data_generator.h"
 
 // =================== GLOBAL OBJECTS ===================
 sbs_data_t sbsData;
-Encoder myEnc(ENC_S1_PIN, ENC_S2_PIN);
+bool isDemoMode = false;
 
-// =================== PROGRAM STATE ===================
-enum Screen { MAIN_MENU, CYCLES_SCREEN, DEVICE_PING_SCREEN, SETTINGS_SCREEN, DEMO_SCREEN };
-Screen currentScreen = MAIN_MENU;
-
-// Menu navigation
-int8_t mainMenuSelection = 0;
-int8_t settingsMenuSelection = 0;
-bool settingsEditMode = false;
-uint8_t cyclesToRun = 0;
-
-// Timers
-unsigned long sbsReadTimer = 0;
-unsigned long displayUpdateTimer = 0;
-unsigned long serialOutputTimer = 0;
-
-// =================== ENCODER VARS ===================
-long oldEncoderPos = -999;
-unsigned long lastButtonPress = 0;
+// =================== PROTOTYPES ===================
+void showMenu();
+void handleUserInput();
+void runCalibrationProcess();
+void runChargeProcess(bool partOfCalibration = false);
+void runDischargeProcess(bool partOfCalibration = false);
+void runPause(long unsigned int pauseMillis, int currentCycle, int totalCycles, unsigned long startTime);
+void readAndDisplayBatteryData();
+void controlChargeRelay(bool on);
+void controlDischargeRelay(bool on);
+int readSerialInteger(int minVal, int maxVal);
 
 // =================== SETUP ===================
 void setup() {
   Serial.begin(115200);
 
-  pinMode(ENC_KEY_PIN, INPUT_PULLUP);
+  // Initialize pins
+  pinMode(CHARGE_RELAY_PIN, OUTPUT);
+  pinMode(DISCHARGE_RELAY_PIN, OUTPUT);
+  pinMode(LED_CHARGE_RUN_PIN, OUTPUT);
+  pinMode(LED_CHARGE_DONE_PIN, OUTPUT);
+  pinMode(LED_DISCHARGE_RUN_PIN, OUTPUT);
+  pinMode(LED_DISCHARGE_DONE_PIN, OUTPUT);
 
-  loadSettings();
-  cyclesToRun = getSettings().cyclesCount;
+  // Relays are active-low, so HIGH is OFF
+  digitalWrite(CHARGE_RELAY_PIN, HIGH);
+  digitalWrite(DISCHARGE_RELAY_PIN, HIGH);
+  // Turn all LEDs off
+  digitalWrite(LED_CHARGE_RUN_PIN, LOW);
+  digitalWrite(LED_CHARGE_DONE_PIN, LOW);
+  digitalWrite(LED_DISCHARGE_RUN_PIN, LOW);
+  digitalWrite(LED_DISCHARGE_DONE_PIN, LOW);
 
-  initDisplay();
   initSBS();
+  loadSettings();
   initStateMachine();
 
-  drawMainMenu(mainMenuSelection, true);
+  int attempts = 0;
+  while (true) {
+    if (readSBSData(sbsData)) {
+      printFullStatusToSerial(sbsData);
+      showMenu();
+      break;
+    } else {
+      attempts++;
+      Serial.print("Device not found [");
+      Serial.print(attempts);
+      Serial.println("]");
+      delay(1000);
+    }
+  }
 }
 
 // =================== MAIN LOOP ===================
 void loop() {
-  handleEncoder();
-  handleButton();
+  handleUserInput();
+}
 
-  if (millis() - sbsReadTimer > (unsigned long)getSettings().smbusReadTimeout * 1000) {
-    sbsReadTimer = millis();
-    if (currentScreen == CYCLES_SCREEN) {
-      readSBSData(sbsData);
-      updateStateMachine(sbsData, false); // Not demo mode
-    } else if (currentScreen == DEMO_SCREEN) {
-      // Data is generated inside updateStateMachine for demo mode
-      updateStateMachine(sbsData, true); // Demo mode
-    } else if (currentScreen == DEVICE_PING_SCREEN) {
-      readSBSData(sbsData);
+// =================== MENU & USER INPUT ===================
+void showMenu() {
+  Serial.println("\nSelect an option:");
+  Serial.println("1. Run Calibration");
+  Serial.println("2. Read Battery Data");
+  Serial.println("3. Start Charge");
+  Serial.println("4. Start Discharge");
+  Serial.println("5. Demo");
+}
+
+void handleUserInput() {
+  if (Serial.available() > 0) {
+    char command = Serial.read();
+    switch (command) {
+      case '1':
+        isDemoMode = false;
+        runCalibrationProcess();
+        break;
+      case '2':
+        readAndDisplayBatteryData();
+        break;
+      case '3':
+        isDemoMode = false;
+        runChargeProcess();
+        break;
+      case '4':
+        isDemoMode = false;
+        runDischargeProcess();
+        break;
+      case '5':
+        isDemoMode = true;
+        runCalibrationProcess(); // Demo mode now calls the same calibration process
+        break;
+      default:
+        // Ignore invalid input
+        break;
     }
   }
+}
 
-  // In demo mode, we need to continuously generate data for display
-  if (currentScreen == DEMO_SCREEN) {
-    generateDemoData(sbsData, getCurrentState());
+int readSerialInteger(int minVal, int maxVal) {
+    String input = "";
+    while (true) {
+        if (Serial.available() > 0) {
+            char c = Serial.read();
+            if (c == '\n' || c == '\r') {
+                int num = input.toInt();
+                if (num >= minVal && num <= maxVal) {
+                    return num;
+                } else {
+                    Serial.print("Invalid input. Please enter a number between ");
+                    Serial.print(minVal);
+                    Serial.print(" and ");
+                    Serial.print(maxVal);
+                    Serial.println(".");
+                    input = "";
+                }
+            } else if (isDigit(c)) {
+                input += c;
+            }
+        }
+    }
+}
+
+
+// =================== CORE PROCESSES ===================
+void runCalibrationProcess() {
+  Serial.println("Enter cycles count [0...5]");
+  int cycles = readSerialInteger(0, 5);
+
+  if (cycles == 0) {
+    showMenu();
+    return;
   }
 
-  if (millis() - displayUpdateTimer > 500) {
-      displayUpdateTimer = millis();
+  Serial.println("Starting calibration pre-charge...");
+  runChargeProcess(true);
 
-      // If the process has just stopped because of a disconnection, show the ping screen
-      if (currentScreen == CYCLES_SCREEN && !isProcessRunning() && !sbsData.dataValid) {
-          currentScreen = DEVICE_PING_SCREEN;
-          drawDevicePingScreen(sbsData, false, true);
-      } else if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN) {
-        drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), false);
-      } else if (currentScreen == DEVICE_PING_SCREEN) {
-        drawDevicePingScreen(sbsData, sbsData.dataValid, false);
-      }
+  Serial.println("Waiting 1 hour after pre-charge...");
+  if (isDemoMode) {
+    generateDemoData(sbsData, PAUSE_AFTER_CHARGE);
+    printFullStatusToSerial(sbsData, 0, cycles, 0);
+  }
+  if (!isDemoMode) controlChargeRelay(true);
+  runPause(3600000UL, 0, cycles, millis());
+
+  unsigned long startTime = millis();
+
+  for (int i = 1; i <= cycles; i++) {
+    Serial.print("Starting calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": Discharge");
+    runDischargeProcess(true);
+    if (!isDemoMode) controlDischargeRelay(false);
+
+    Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": 5-hour pause");
+    if(isDemoMode) {
+      generateDemoData(sbsData, PAUSE_AFTER_DISCHARGE);
+      printFullStatusToSerial(sbsData, i, cycles, millis() - startTime);
+    }
+    runPause(18000000UL, i, cycles, startTime);
+
+    Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": Charge");
+    runChargeProcess(true);
+
+    Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": 1-hour pause");
+    if (isDemoMode) {
+      generateDemoData(sbsData, PAUSE_AFTER_CHARGE);
+      printFullStatusToSerial(sbsData, i, cycles, millis() - startTime);
+    }
+    if (!isDemoMode) controlChargeRelay(true);
+    runPause(3600000UL, i, cycles, startTime);
   }
 
-  if (getSettings().serialOutputTimeout > 0 && millis() - serialOutputTimer > (unsigned long)getSettings().serialOutputTimeout * 1000) {
-    serialOutputTimer = millis();
-    if (currentScreen == CYCLES_SCREEN || currentScreen == DEMO_SCREEN || currentScreen == DEVICE_PING_SCREEN) {
+  Serial.println("\nCalibration process finished!");
+  isDemoMode = false; // Reset demo flag after completion
+  showMenu();
+}
+
+void runChargeProcess(bool partOfCalibration) {
+  if (isDemoMode) {
+    generateDemoData(sbsData, CHARGING);
+    printFullStatusToSerial(sbsData);
+    delay(3000);
+    sbsData.batteryStatus |= (1 << 5); // Set FC flag
+    return;
+  }
+
+  controlChargeRelay(true);
+  unsigned long lastReadTime = 0;
+  const long readInterval = 15000;
+
+  while (true) {
+    if (millis() - lastReadTime >= readInterval) {
+      lastReadTime = millis();
+      if (readSBSData(sbsData)) {
         printFullStatusToSerial(sbsData);
-        printKeyValueStatusToSerial(sbsData);
+        if (sbsData.batteryStatus & (1 << 5)) {
+          Serial.println("Battery fully charged.");
+          break;
+        }
+      } else {
+        Serial.println("Failed to read battery data. Stopping charge.");
+        break;
+      }
     }
+  }
+
+  if (!partOfCalibration) {
+    controlChargeRelay(false);
+    showMenu();
   }
 }
 
-// =================== HANDLERS ===================
-void handleEncoder() {
-    long newEncoderPos = myEnc.read() / 4;
-    if (newEncoderPos != oldEncoderPos) {
-        long delta = newEncoderPos - oldEncoderPos;
-        switch(currentScreen) {
-            case MAIN_MENU:
-                mainMenuSelection = (mainMenuSelection + delta + 4) % 4;
-                drawMainMenu(mainMenuSelection, false);
-                break;
-            case SETTINGS_SCREEN:
-                if(settingsEditMode) {
-                    update_settings_value(delta);
-                } else {
-                    settingsMenuSelection = (settingsMenuSelection + delta + 10) % 10;
-                }
-                drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
-                break;
-            case CYCLES_SCREEN:
-            case DEMO_SCREEN:
-                if (!isProcessRunning()) {
-                    cyclesToRun = constrain(cyclesToRun + delta, 0, 99);
-                    drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, false, false);
-                }
-                break;
+void runDischargeProcess(bool partOfCalibration) {
+  if (isDemoMode) {
+    generateDemoData(sbsData, DISCHARGING);
+    printFullStatusToSerial(sbsData);
+    delay(3000);
+    sbsData.batteryStatus |= (1 << 4); // Set FD flag
+    return;
+  }
+
+  controlDischargeRelay(true);
+  unsigned long lastReadTime = 0;
+  const long readInterval = 15000;
+
+  while (true) {
+    if (millis() - lastReadTime >= readInterval) {
+      lastReadTime = millis();
+      if (readSBSData(sbsData)) {
+        printFullStatusToSerial(sbsData);
+        if (sbsData.batteryStatus & (1 << 4)) {
+          Serial.println("Battery fully discharged.");
+          break;
         }
-        oldEncoderPos = newEncoderPos;
+      } else {
+        Serial.println("Failed to read battery data. Stopping discharge.");
+        break;
+      }
     }
+  }
+
+  if (!partOfCalibration) {
+    controlDischargeRelay(false);
+    showMenu();
+  }
 }
 
-void handleButton() {
-    if (digitalRead(ENC_KEY_PIN) == LOW && millis() - lastButtonPress > 250) {
-        lastButtonPress = millis();
-        Screen previousScreen = currentScreen;
+void runPause(long unsigned int pauseMillis, int currentCycle, int totalCycles, unsigned long startTime) {
+    if (isDemoMode) {
+        // In demo mode, the pause is just a short delay.
+        // Data is generated and printed by the main calibration loop.
+        delay(3000);
+        return;
+    }
 
-        switch(currentScreen) {
-            case MAIN_MENU:
-                // For "Cycles" menu item, first go to ping screen to check connection
-                if (mainMenuSelection == 0) { // "Cycles"
-                    readSBSData(sbsData);
-                    if (sbsData.dataValid) {
-                        currentScreen = CYCLES_SCREEN;
-                        cyclesToRun = getSettings().cyclesCount;
-                        drawCyclesScreen(sbsData, 0, cyclesToRun, false, true);
-                    } else {
-                        currentScreen = DEVICE_PING_SCREEN;
-                        drawDevicePingScreen(sbsData, false, true);
-                    }
-                } else {
-                    currentScreen = (Screen)(mainMenuSelection + 1);
-                    cyclesToRun = getSettings().cyclesCount;
-                    if (currentScreen == DEMO_SCREEN) drawCyclesScreen(sbsData, 0, cyclesToRun, false, true);
-                    else if (currentScreen == DEVICE_PING_SCREEN) { readSBSData(sbsData); drawDevicePingScreen(sbsData, sbsData.dataValid, true); }
-                    else if (currentScreen == SETTINGS_SCREEN) drawSettingsScreen(settingsMenuSelection, settingsEditMode, true);
-                }
-                break;
-            case CYCLES_SCREEN:
-        case DEMO_SCREEN:
-             if (currentScreen == CYCLES_SCREEN) {
-                startStopProcess(cyclesToRun, sbsData.dataValid);
-             } else {
-                startStopProcess(cyclesToRun, true); // In demo mode, we don't care about the battery
-             }
-             drawCyclesScreen(sbsData, getCyclesLeft(), cyclesToRun, isProcessRunning(), true);
-             break;
-            case DEVICE_PING_SCREEN:
-                currentScreen = MAIN_MENU;
-                drawMainMenu(mainMenuSelection, true);
-                break;
-            case SETTINGS_SCREEN:
-                if (settingsMenuSelection == 8) { resetSettings(); drawSettingsScreen(settingsMenuSelection, settingsEditMode, true); }
-                else if (settingsMenuSelection == 9) {
-                    getSettings().cyclesCount = cyclesToRun; // Save current cycle value if changed
-                    saveSettings();
-                    currentScreen = MAIN_MENU;
-                    drawMainMenu(mainMenuSelection, true);
-                } else {
-                    settingsEditMode = !settingsEditMode;
-                    drawSettingsScreen(settingsMenuSelection, settingsEditMode, false);
-                }
-                break;
-        }
+    unsigned long pauseStartTime = millis();
+    unsigned long lastReadTime = 0;
+    const long readInterval = 60000;
 
-        // If the screen has changed, reset the encoder state
-        if (previousScreen != currentScreen) {
-            myEnc.write(0);
-            oldEncoderPos = myEnc.read() / 4;
+    while (millis() - pauseStartTime < pauseMillis) {
+        if (millis() - lastReadTime >= readInterval) {
+            lastReadTime = millis();
+            if(readSBSData(sbsData)) {
+                printFullStatusToSerial(sbsData, currentCycle, totalCycles, millis() - startTime);
+            } else {
+                Serial.println("Failed to read battery data during pause.");
+            }
         }
     }
 }
 
-void update_settings_value(int amount) {
-    Settings& s = getSettings();
-    switch (settingsMenuSelection) {
-        case 0: s.cyclesCount = constrain(s.cyclesCount + amount, 0, 99); cyclesToRun = s.cyclesCount; break;
-        case 1: s.devicePingTimeout = constrain(s.devicePingTimeout + amount, 0, 99); break;
-        case 2: s.pauseAfterCharge = constrain(s.pauseAfterCharge + amount, 0, 999); break;
-        case 3: s.pauseAfterDischarge = constrain(s.pauseAfterDischarge + amount, 0, 999); break;
-        case 4: s.smbusReadTimeout = constrain(s.smbusReadTimeout + amount, 0, 99); break;
-        case 5: s.demoChargeTime = constrain(s.demoChargeTime + amount, 0, 99); break;
-        case 6: s.demoDischargeTime = constrain(s.demoDischargeTime + amount, 0, 99); break;
-        case 7: s.serialOutputTimeout = constrain(s.serialOutputTimeout + amount, 0, 99); break;
+
+void readAndDisplayBatteryData() {
+    if (readSBSData(sbsData)) {
+        printFullStatusToSerial(sbsData);
+    } else {
+        Serial.println("Failed to read battery data.");
     }
+    showMenu();
+}
+
+// =================== HARDWARE CONTROL ===================
+void controlChargeRelay(bool on) {
+  if (on) {
+    digitalWrite(LED_CHARGE_DONE_PIN, LOW);
+  }
+
+  digitalWrite(CHARGE_RELAY_PIN, on ? LOW : HIGH);
+  digitalWrite(LED_CHARGE_RUN_PIN, on ? HIGH : LOW);
+
+  if (!on) {
+    digitalWrite(LED_CHARGE_DONE_PIN, HIGH);
+  }
+}
+
+void controlDischargeRelay(bool on) {
+  if (on) {
+    digitalWrite(LED_DISCHARGE_DONE_PIN, LOW);
+  }
+
+  digitalWrite(DISCHARGE_RELAY_PIN, on ? LOW : HIGH);
+  digitalWrite(LED_DISCHARGE_RUN_PIN, on ? HIGH : LOW);
+
+  if (!on) {
+    digitalWrite(LED_DISCHARGE_DONE_PIN, HIGH);
+  }
 }

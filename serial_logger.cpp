@@ -12,15 +12,23 @@ const char* stateToString(TrainerState state) {
     }
 }
 
-void printFullStatusToSerial(const sbs_data_t& data) {
+void printFullStatusToSerial(const sbs_data_t& data, int currentCycle, int totalCycles, unsigned long elapsedTime) {
     char buf[80];
 
     Serial.println("\n===== BATTERY TRAINER STATUS =====");
 
+    // Calibration Status
+    if (currentCycle != -1 && totalCycles != -1) {
+        unsigned long hours = elapsedTime / 3600000;
+        unsigned long minutes = (elapsedTime % 3600000) / 60000;
+        unsigned long seconds = (elapsedTime % 60000) / 1000;
+        sprintf(buf, "Calibration Cycle: %d / %d | Elapsed Time: %lu h %lu m %lu s",
+                currentCycle, totalCycles, hours, minutes, seconds);
+        Serial.println(buf);
+    }
+
     // Trainer Status
     sprintf(buf, "Process Running: %s | State: %s", isProcessRunning() ? "YES" : "NO", stateToString(getCurrentState()));
-    Serial.println(buf);
-    sprintf(buf, "Cycles Left: %d", getCyclesLeft());
     Serial.println(buf);
 
     Serial.println("--- SMART BATTERY DATA ---");
