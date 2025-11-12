@@ -50,7 +50,6 @@ void setup() {
   digitalWrite(LED_DISCHARGE_DONE_PIN, LOW);
 
   initSBS();
-  initStateMachine();
 
   int attempts = 0;
   while (true) {
