@@ -51,20 +51,18 @@ void setup() {
 
   initSBS();
 
-  int attempts = 0;
-  while (true) {
+  for (int attempts = 1; attempts <= 3; attempts++) {
     if (readSBSData(sbsData)) {
       printFullStatusToSerial(sbsData);
-      showMenu();
-      break;
+      break; // Exit loop on success
     } else {
-      attempts++;
       Serial.print("Device not found [");
       Serial.print(attempts);
       Serial.println("]");
       delay(1000);
     }
   }
+  showMenu(); // Always show menu after attempts
 }
 
 // =================== MAIN LOOP ===================
