@@ -5,15 +5,16 @@
  */
 
 #include "config.h"
-#include "settings.h"
 #include "sbs_handler.h"
 #include "state_machine.h"
 #include "serial_logger.h"
 #include "demo_data_generator.h"
 
-// =================== GLOBAL OBJECTS ===================
+// =================== GLOBAL OBJECTS & STATE ===================
 sbs_data_t sbsData;
 bool isDemoMode = false;
+TrainerState currentState = IDLE;
+bool processRunning = false;
 
 // =================== PROTOTYPES ===================
 void showMenu();
@@ -49,7 +50,6 @@ void setup() {
   digitalWrite(LED_DISCHARGE_DONE_PIN, LOW);
 
   initSBS();
-  loadSettings();
   initStateMachine();
 
   int attempts = 0;
@@ -140,18 +140,22 @@ int readSerialInteger(int minVal, int maxVal) {
 
 // =================== CORE PROCESSES ===================
 void runCalibrationProcess() {
+  processRunning = true;
   Serial.println("Enter cycles count [0...5]");
   int cycles = readSerialInteger(0, 5);
 
   if (cycles == 0) {
+    processRunning = false;
     showMenu();
     return;
   }
 
   Serial.println("Starting calibration pre-charge...");
+  currentState = CHARGING;
   runChargeProcess(true);
 
   Serial.println("Waiting 1 hour after pre-charge...");
+  currentState = PAUSE_AFTER_CHARGE;
   if (isDemoMode) {
     generateDemoData(sbsData, PAUSE_AFTER_CHARGE);
     printFullStatusToSerial(sbsData, 0, cycles, 0);
@@ -163,10 +167,12 @@ void runCalibrationProcess() {
 
   for (int i = 1; i <= cycles; i++) {
     Serial.print("Starting calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": Discharge");
+    currentState = DISCHARGING;
     runDischargeProcess(true);
     if (!isDemoMode) controlDischargeRelay(false);
 
     Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": 5-hour pause");
+    currentState = PAUSE_AFTER_DISCHARGE;
     if(isDemoMode) {
       generateDemoData(sbsData, PAUSE_AFTER_DISCHARGE);
       printFullStatusToSerial(sbsData, i, cycles, millis() - startTime);
@@ -174,9 +180,11 @@ void runCalibrationProcess() {
     runPause(18000000UL, i, cycles, startTime);
 
     Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": Charge");
+    currentState = CHARGING;
     runChargeProcess(true);
 
     Serial.print("Calibration cycle "); Serial.print(i); Serial.print("/"); Serial.print(cycles); Serial.println(": 1-hour pause");
+    currentState = PAUSE_AFTER_CHARGE;
     if (isDemoMode) {
       generateDemoData(sbsData, PAUSE_AFTER_CHARGE);
       printFullStatusToSerial(sbsData, i, cycles, millis() - startTime);
@@ -186,84 +194,92 @@ void runCalibrationProcess() {
   }
 
   Serial.println("\nCalibration process finished!");
-  isDemoMode = false; // Reset demo flag after completion
+  processRunning = false;
+  currentState = IDLE;
+  isDemoMode = false;
   showMenu();
 }
 
 void runChargeProcess(bool partOfCalibration) {
+  if (!partOfCalibration) processRunning = true;
+  currentState = CHARGING;
+
   if (isDemoMode) {
     generateDemoData(sbsData, CHARGING);
     printFullStatusToSerial(sbsData);
     delay(3000);
     sbsData.batteryStatus |= (1 << 5); // Set FC flag
-    return;
-  }
+  } else {
+      controlChargeRelay(true);
+      unsigned long lastReadTime = 0;
+      const long readInterval = 15000;
 
-  controlChargeRelay(true);
-  unsigned long lastReadTime = 0;
-  const long readInterval = 15000;
-
-  while (true) {
-    if (millis() - lastReadTime >= readInterval) {
-      lastReadTime = millis();
-      if (readSBSData(sbsData)) {
-        printFullStatusToSerial(sbsData);
-        if (sbsData.batteryStatus & (1 << 5)) {
-          Serial.println("Battery fully charged.");
-          break;
+      while (true) {
+        if (millis() - lastReadTime >= readInterval) {
+          lastReadTime = millis();
+          if (readSBSData(sbsData)) {
+            printFullStatusToSerial(sbsData);
+            if (sbsData.batteryStatus & (1 << 5)) {
+              Serial.println("Battery fully charged.");
+              break;
+            }
+          } else {
+            Serial.println("Failed to read battery data. Stopping charge.");
+            break;
+          }
         }
-      } else {
-        Serial.println("Failed to read battery data. Stopping charge.");
-        break;
       }
-    }
   }
 
   if (!partOfCalibration) {
-    controlChargeRelay(false);
+    if (!isDemoMode) controlChargeRelay(false);
+    processRunning = false;
+    currentState = IDLE;
     showMenu();
   }
 }
 
 void runDischargeProcess(bool partOfCalibration) {
+  if (!partOfCalibration) processRunning = true;
+  currentState = DISCHARGING;
+
   if (isDemoMode) {
     generateDemoData(sbsData, DISCHARGING);
     printFullStatusToSerial(sbsData);
     delay(3000);
     sbsData.batteryStatus |= (1 << 4); // Set FD flag
-    return;
-  }
+  } else {
+      controlDischargeRelay(true);
+      unsigned long lastReadTime = 0;
+      const long readInterval = 15000;
 
-  controlDischargeRelay(true);
-  unsigned long lastReadTime = 0;
-  const long readInterval = 15000;
-
-  while (true) {
-    if (millis() - lastReadTime >= readInterval) {
-      lastReadTime = millis();
-      if (readSBSData(sbsData)) {
-        printFullStatusToSerial(sbsData);
-        if (sbsData.batteryStatus & (1 << 4)) {
-          Serial.println("Battery fully discharged.");
-          break;
+      while (true) {
+        if (millis() - lastReadTime >= readInterval) {
+          lastReadTime = millis();
+          if (readSBSData(sbsData)) {
+            printFullStatusToSerial(sbsData);
+            if (sbsData.batteryStatus & (1 << 4)) {
+              Serial.println("Battery fully discharged.");
+              break;
+            }
+          } else {
+            Serial.println("Failed to read battery data. Stopping discharge.");
+            break;
+          }
         }
-      } else {
-        Serial.println("Failed to read battery data. Stopping discharge.");
-        break;
       }
-    }
   }
 
   if (!partOfCalibration) {
-    controlDischargeRelay(false);
+    if (!isDemoMode) controlDischargeRelay(false);
+    processRunning = false;
+    currentState = IDLE;
     showMenu();
   }
 }
 
 void runPause(long unsigned int pauseMillis, int currentCycle, int totalCycles, unsigned long startTime) {
     if (isDemoMode) {
-        // In demo mode, the pause is just a short delay.
-        // Data is generated and printed by the main calibration loop.
         delay(3000);
         return;
     }

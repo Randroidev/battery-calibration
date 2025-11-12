@@ -3,9 +3,10 @@
 
 #include "types.h"
 
-void initStateMachine();
-void startStopProcess(uint8_t cycles, bool isConnected);
-void updateStateMachine(const sbs_data_t& sbsData, bool isDemoMode);
+// Global state variables defined in the main .ino file
+extern TrainerState currentState;
+extern bool processRunning;
+
 TrainerState getCurrentState();
 uint8_t getCyclesLeft();
 bool isProcessRunning();

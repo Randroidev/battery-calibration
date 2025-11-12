@@ -70,7 +70,6 @@ void printFullStatusToSerial(const sbs_data_t& data, int currentCycle, int total
 void printKeyValueStatusToSerial(const sbs_data_t& data) {
     Serial.print("running:"); Serial.print(isProcessRunning() ? "true" : "false"); Serial.print(",");
     Serial.print("state:"); Serial.print(stateToString(getCurrentState())); Serial.print(",");
-    Serial.print("cycles_left:"); Serial.print(getCyclesLeft()); Serial.print(",");
     Serial.print("data_valid:"); Serial.print(data.dataValid ? "true" : "false");
 
     if (data.dataValid) {
