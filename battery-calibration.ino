@@ -26,7 +26,9 @@ void runPause(long unsigned int pauseMillis, int currentCycle, int totalCycles, 
 void readAndDisplayBatteryData();
 void controlChargeRelay(bool on);
 void controlDischargeRelay(bool on);
+char readSerialChar();
 int readSerialInteger(int minVal, int maxVal);
+String readSerialLine();
 
 // =================== SETUP ===================
 void setup() {
@@ -82,7 +84,7 @@ void showMenu() {
 
 void handleUserInput() {
   if (Serial.available() > 0) {
-    char command = Serial.read();
+    char command = readSerialChar();
     switch (command) {
       case '1':
         isDemoMode = false;
@@ -110,28 +112,46 @@ void handleUserInput() {
   }
 }
 
-int readSerialInteger(int minVal, int maxVal) {
-    String input = "";
-    while (true) {
-        if (Serial.available() > 0) {
-            char c = Serial.read();
-            if (c == '\n' || c == '\r') {
-                int num = input.toInt();
-                if (num >= minVal && num <= maxVal) {
-                    return num;
-                } else {
-                    Serial.print("Invalid input. Please enter a number between ");
-                    Serial.print(minVal);
-                    Serial.print(" and ");
-                    Serial.print(maxVal);
-                    Serial.println(".");
-                    input = "";
-                }
-            } else if (isDigit(c)) {
-                input += c;
-            }
+String readSerialLine() {
+  String line = "";
+  while (true) {
+    if (Serial.available() > 0) {
+      char c = Serial.read();
+      if (c == '\n' || c == '\r') {
+        // End of line
+        if (line.length() > 0) {
+          // Skip trailing LF if it's a CRLF
+          if (c == '\r' && Serial.peek() == '\n') {
+            Serial.read();
+          }
+          return line;
         }
+      } else {
+        line += c;
+      }
     }
+  }
+}
+
+// Function to read a single character, ignoring line endings
+char readSerialChar() {
+  return readSerialLine().charAt(0);
+}
+
+int readSerialInteger(int minVal, int maxVal) {
+  while (true) {
+    String line = readSerialLine();
+    int num = line.toInt();
+    if (num >= minVal && num <= maxVal) {
+      return num;
+    } else {
+      Serial.print("Invalid input. Please enter a number between ");
+      Serial.print(minVal);
+      Serial.print(" and ");
+      Serial.print(maxVal);
+      Serial.println(".");
+    }
+  }
 }
 
 
@@ -200,14 +220,16 @@ void runCalibrationProcess() {
 void runChargeProcess(bool partOfCalibration) {
   if (!partOfCalibration) processRunning = true;
   currentState = CHARGING;
+  controlChargeRelay(true);
+  bool readFailed = false;
 
   if (isDemoMode) {
     generateDemoData(sbsData, CHARGING);
     printFullStatusToSerial(sbsData);
     delay(3000);
     sbsData.batteryStatus |= (1 << 5); // Set FC flag
+    controlChargeRelay(false);
   } else {
-      controlChargeRelay(true);
       unsigned long lastReadTime = 0;
       const long readInterval = 15000;
 
@@ -222,6 +244,7 @@ void runChargeProcess(bool partOfCalibration) {
             }
           } else {
             Serial.println("Failed to read battery data. Stopping charge.");
+            readFailed = true;
             break;
           }
         }
@@ -230,6 +253,10 @@ void runChargeProcess(bool partOfCalibration) {
 
   if (!partOfCalibration) {
     if (!isDemoMode) controlChargeRelay(false);
+    if (readFailed) {
+      Serial.println("Pausing for 5 seconds before returning to menu...");
+      delay(5000);
+    }
     processRunning = false;
     currentState = IDLE;
     showMenu();
@@ -239,14 +266,16 @@ void runChargeProcess(bool partOfCalibration) {
 void runDischargeProcess(bool partOfCalibration) {
   if (!partOfCalibration) processRunning = true;
   currentState = DISCHARGING;
+  controlDischargeRelay(true);
+  bool readFailed = false;
 
   if (isDemoMode) {
     generateDemoData(sbsData, DISCHARGING);
     printFullStatusToSerial(sbsData);
     delay(3000);
     sbsData.batteryStatus |= (1 << 4); // Set FD flag
+    controlDischargeRelay(false);
   } else {
-      controlDischargeRelay(true);
       unsigned long lastReadTime = 0;
       const long readInterval = 15000;
 
@@ -261,6 +290,7 @@ void runDischargeProcess(bool partOfCalibration) {
             }
           } else {
             Serial.println("Failed to read battery data. Stopping discharge.");
+            readFailed = true;
             break;
           }
         }
@@ -269,6 +299,10 @@ void runDischargeProcess(bool partOfCalibration) {
 
   if (!partOfCalibration) {
     if (!isDemoMode) controlDischargeRelay(false);
+     if (readFailed) {
+      Serial.println("Pausing for 5 seconds before returning to menu...");
+      delay(5000);
+    }
     processRunning = false;
     currentState = IDLE;
     showMenu();
